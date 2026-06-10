@@ -1,0 +1,17 @@
+export type {
+  ComposerBucket,
+  CreditKey,
+  HealthResponse,
+  MetadataResponse,
+  PopularityLabelBucket,
+  PopularityLabelsResponse,
+  PublishedYearBucket,
+  SearchResponse,
+  SearchResult,
+  SongDetail,
+  SortOrder,
+  StatisticsResponse,
+  TitleLengthBucket,
+  VideoEntry,
+  VideoMap,
+} from "../../shared/api-types";

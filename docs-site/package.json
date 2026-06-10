@@ -1,0 +1,16 @@
+{
+  "name": "vocaloid-title-search-docs",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "yarn@1.22.22",
+  "scripts": {
+    "dev": "./node_modules/.bin/vitepress dev --host 127.0.0.1",
+    "build": "./node_modules/.bin/vitepress build",
+    "preview": "./node_modules/.bin/vitepress preview --host 127.0.0.1"
+  },
+  "dependencies": {
+    "vitepress": "^1.6.4",
+    "vue": "^3.5.35"
+  }
+}

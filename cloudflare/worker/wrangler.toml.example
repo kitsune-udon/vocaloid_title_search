@@ -1,0 +1,33 @@
+name = "vocaloid-title-search-api"
+main = "src/index.ts"
+compatibility_date = "2026-06-09"
+
+[vars]
+CORS_ORIGINS = "http://127.0.0.1:5173"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "vocaloid-title-search-dev"
+database_id = "replace-with-dev-database-id"
+
+[env.staging]
+# Worker routes are managed by Terraform in infra/cloudflare.
+
+[env.staging.vars]
+CORS_ORIGINS = "https://staging.vocaloid-title-search.example.com"
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "vocaloid-title-search-staging"
+database_id = "replace-with-staging-database-id"
+
+[env.production]
+# Worker routes are managed by Terraform in infra/cloudflare.
+
+[env.production.vars]
+CORS_ORIGINS = "https://vocaloid-title-search.example.com"
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "vocaloid-title-search-prod"
+database_id = "replace-with-prod-database-id"

@@ -1,0 +1,19 @@
+{
+  "name": "vocaloid-title-search-worker",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "yarn@1.22.22",
+  "scripts": {
+    "typecheck": "../../frontend/node_modules/.bin/tsc -p tsconfig.json",
+    "test": "node --test test/*.test.js",
+    "dev": "wrangler dev --local --port 8000",
+    "deploy:staging": "wrangler deploy --env staging",
+    "deploy:production": "wrangler deploy --env production",
+    "smoke": "python3 ../../tools/check_worker_api.py"
+  },
+  "devDependencies": {
+    "esbuild": "^0.27.3",
+    "wrangler": "^4.53.0"
+  }
+}

@@ -1,0 +1,27 @@
+# Copy this file to terraform.tfvars and replace placeholders.
+# Do not commit terraform.tfvars.
+#
+# account_id: Cloudflare account ID, not your email address.
+# zone_id: Cloudflare zone ID, not the domain name.
+account_id = "replace-with-account-id"
+zone_id    = "replace-with-zone-id"
+zone_name  = "example.com"
+
+project_name          = "vocaloid-title-search"
+production_branch     = "production"
+production_hostname   = "vocaloid-title-search.example.com"
+staging_hostname      = "staging.vocaloid-title-search.example.com"
+worker_script_base_name = "vocaloid-title-search-api"
+
+d1_database_names = {
+  dev        = "vocaloid-title-search-dev"
+  staging    = "vocaloid-title-search-staging"
+  production = "vocaloid-title-search-prod"
+}
+
+worker_script_names = {
+  staging    = "vocaloid-title-search-api-staging"
+  production = "vocaloid-title-search-api-production"
+}
+
+manage_worker_routes = true

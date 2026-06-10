@@ -1,0 +1,24 @@
+{
+  "name": "vocaloid-title-search-webui",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "yarn@1.22.22",
+  "scripts": {
+    "dev": "./node_modules/.bin/vite --host 127.0.0.1",
+    "build": "./node_modules/.bin/vue-tsc --noEmit && ./node_modules/.bin/vite build",
+    "preview": "./node_modules/.bin/vite preview --host 127.0.0.1",
+    "test:e2e": "./node_modules/.bin/playwright test"
+  },
+  "dependencies": {
+    "@lucide/vue": "^1.17.0",
+    "@vitejs/plugin-vue": "^6.0.7",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.16",
+    "vue": "^3.5.35",
+    "vue-tsc": "^3.3.3"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0"
+  }
+}
