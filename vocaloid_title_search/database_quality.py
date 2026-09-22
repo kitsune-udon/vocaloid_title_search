@@ -151,6 +151,10 @@ def count_detail_json_values(connection: sqlite3.Connection) -> dict[str, int]:
 
 
 def count_video_list(value: object, counts: dict[str, int], key: str) -> None:
+    if isinstance(value, dict):
+        for service in ("niconico", "youtube"):
+            count_video_list(value.get(service), counts, key)
+        return
     if not isinstance(value, list):
         return
     counts[key] += len(value)

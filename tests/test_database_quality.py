@@ -42,6 +42,21 @@ class DatabaseQualityTests(unittest.TestCase):
             self.assertEqual(report.counts["videos"], 1)
             self.assertEqual(report.counts["videos_with_thumbnail"], 1)
 
+    def test_service_grouped_videos_are_counted(self) -> None:
+        with temporary_db([raw_song()]) as db_path:
+            save_song_detail_entry(db_path, MELT_URL, {
+                "videos": {
+                    "niconico": [{"id": "sm1715919", "title": "メルト"}],
+                    "youtube": [{"id": "example", "thumbnail_url": "https://example.test/thumb.jpg"}],
+                },
+                "related_videos": {"niconico": [{"id": "sm2183246"}], "youtube": []},
+            })
+            report = validate_database_quality(db_path)
+            self.assertEqual(report.counts["videos"], 2)
+            self.assertEqual(report.counts["related_videos"], 1)
+            self.assertEqual(report.counts["videos_with_title"], 1)
+            self.assertEqual(report.counts["videos_with_thumbnail"], 1)
+
     def test_database_with_missing_detail_fails_quality_check(self) -> None:
         with temporary_db() as db_path:
             rebuild_database(db_path, [raw_song()], {}, "source")

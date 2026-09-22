@@ -64,6 +64,7 @@
 | DEV-043 | Done | Agent | docs | none | VitePressでローカルDocsプレビューを追加する | 既存Markdownを使い、目的別ナビゲーション、サイドバー、ローカルpreviewが使える | `(cd docs-site && yarn build)` |
 | DEV-044 | Done | Agent | tooling | DEV-043 | docs専用チェックコマンドを追加する | リンク切れ、秘匿情報、孤立文書、見出し重複の最低限を1コマンドで確認できる | `tools/check_docs.sh` |
 | DEV-045 | Done | Agent | tooling | DEV-044 | docsチェックと既存品質ゲートの関係を整理する | `check_all.sh` に含める軽量検査と、手動実行する重いdocs検査の境界が実装される | `tools/check_all.sh`, `tools/check_docs.sh`, [testing.md](testing.md#documentation-checks) |
+| DEV-046 | Done | Agent | data | none | サムネイル補完漏れを修復し、サービス別動画の品質件数を正しく集計する | 実サムネイルURLをD1へ投入し、動画件数が実データを反映する | DB品質テスト、全品質チェック、staging / production APIと画像取得確認 |
 
 ## Medium
 
@@ -118,6 +119,7 @@
 | PI-001 | Done | Agent | E2E導入 | E2Eを毎回実行するか、release前だけにするか決める | [quality-gates.md](quality-gates.md#e2e-policy) に反映済み |
 | PI-002 | Done | Agent | DB品質検査導入 | DB更新からD1投入までの品質ゲートを標準化する | `validate_db`, `tools/update_d1.sh`, [quality-gates.md](quality-gates.md) に反映済み |
 | PI-003 | Done | Shared | 品質指標策定 | 人間判断が必要な品質基準を定期的に見直す | [quality-gates.md](quality-gates.md#review-cadence) と backlog review に反映済み |
+| PI-004 | Done | Agent | DB再構築後のサムネイル補完漏れ | 公開用DBの動画メタデータ補完と画像確認を必須手順として明記する | operationsのDB更新手順に反映し、補完後の画像取得を検証済み |
 
 ## Done Deletion Criteria
 

@@ -82,11 +82,13 @@ SQLite DBを更新するのは `build_db` と `refresh_video_metadata` です。
 uv run --cache-dir .uv-cache python -m vocaloid_title_search.cli.build_db
 ```
 
-動画メタデータも更新する場合は、DB構築後に別途実行します。
+公開サイト用のDBでは、DB構築後に動画メタデータを必ず補完します。`build_db` は既存の補完結果を引き継がず、動画IDから推測したサムネイルURLに戻します。特にニコニコの実画像URLは推測URLと異なることがあるため、補完を省略するとサムネイルが表示されない場合があります。
 
 ```bash
 uv run --cache-dir .uv-cache python -m vocaloid_title_search.cli.refresh_video_metadata
 ```
+
+補完結果の成功・失敗・フォールバック件数を確認し、代表曲の画像が取得できることを確認します。削除・非公開動画などは補完できない場合があります。
 
 その後、D1へ投入します。Terraform state がある場合、D1 database name と公開URLは自動解決され、投入後に公開APIの smoke test を実行します。stagingで確認してからproductionへ進めます。
 
