@@ -250,3 +250,51 @@ API contract変更時のチェックリスト:
 3. Workerなら `(cd cloudflare/worker && yarn test)` を単独実行する
 4. frontendなら `(cd frontend && yarn build)` を単独実行する
 5. 秘匿情報スキャンなら検出値をプレースホルダーへ置き換える
+
+## Search SQL Benchmark
+
+検索SQLの変更は、APIの応答テストに加えてローカルSQLiteで測定します。Workerの実際のSQLをGit revisionと作業ツリーから読み、各条件で結果が完全一致することを確認してから実行時間の中央値を比較します。DBは読み取り専用で開き、D1には接続しません。
+
+```bash
+uv run --cache-dir .uv-cache python tools/benchmark_search_sql.py --baseline-ref HEAD --rounds 25
+```
+
+コミット後は `--baseline-ref` に変更前のrevisionを指定します。既定DBは `vocaloid_titles.sqlite3`、別DBは `--db-path` で指定できます。比較対象は先頭ページ、5文字検索、公開年降順、深いページです。最初の実行でキャッシュを温め、旧・新SQLの測定順を交互に変えます。SELECTの実行と結果取得のみを測り、件数取得・DB準備確認・通信・D1の課金上の読み取り行数は含みません。
+
+2026-09-23の測定例（7,868曲、SQLite 3.47.1、25回の中央値、比較元 `c36c181`）。全曲分の作曲者集計を各結果の索引検索へ変更しました。
+
+| 条件 | 変更前 | 変更後 |
+| --- | --- | --- |
+| 先頭50件 | 29.92ms | 6.89ms |
+| 5文字の先頭50件 | 19.06ms | 0.36ms |
+| 公開年降順の先頭50件 | 33.39ms | 14.33ms |
+| 5,000件スキップ後の50件 | 39.62ms | 30.97ms |
+
+深いページの効果は小さく、データ量・索引・SQLiteバージョンで値は変わります。D1やブラウザの応答時間を示す値ではありません。
+
+`tests/test_search_sql.py` はWorkerのSQLをSQLiteで実行し、作曲者の並び順、作曲者なし、絞り込み、全ソート、ページ境界をPythonの検索結果と照合します。ネットワークを含むAPI性能は既存の `tools/profile_worker_api.py` で別途確認します。
+
+## CI And Worker Integration
+
+`.github/workflows/checks.yml` はpush・pull request・手動実行で、固定ランタイムとlockfileを使い、全体チェック、文書build、APIモックE2E、実Worker結合E2Eを実行します。Cloudflareの認証情報や実設定は不要です。GitHub上の実行にはworkflowを含む変更のpushが必要です。
+
+```bash
+(cd frontend && yarn test:integration)
+```
+
+結合E2Eは、合成データを専用local D1へ投入し、localhostのWorkerとfrontendを起動します。デスクトップ・モバイルで検索、詳細、ページング、統計からの検索、入力エラーを確認します。`test/wrangler.integration.toml` と `.wrangler/integration` を使い、通常の `wrangler.toml` と公開DBは読みません。localhostの4175・8789番ポートを空けて実行してください。
+
+通常の `test:e2e` はAPIモックで競合検索・画像フォールバックなどを再現し、`test:integration` は実際の接続を検証します。両方ともrelease前に実行します。CI失敗時のPlaywright traceは7日間保存します。
+
+## API Performance History
+
+`tools/profile_worker_api.py` は代表APIの中央値・nearest-rank方式のp95・HTTP状態別件数・エラー率を測定します。HTTPエラーや通信失敗も記録し、途中で計測全体を打ち切りません。エラーがある場合、または指定したp95上限を超える場合は終了コード1になります。p95には失敗リクエストの所要時間も含みます。
+
+```bash
+python3 tools/profile_worker_api.py --base-url https://staging.vocaloid-title-search.example.com \
+  --repeat 20 --interval 0.2 --redact-base-url --output release/performance/profile.json
+```
+
+`.github/workflows/api-profile.yml` は週次（月曜06:17 JST）と手動実行に対応します。リポジトリsecret `PROFILE_BASE_URL` に測定先を設定して有効にし、未設定なら明示してスキップします。認証tokenやCloudflare権限は不要です。対象は公開APIへのGETだけです。結果は実URLを除いて30日間artifactに保存します。
+
+`PROFILE_MAX_P95_MS` をリポジトリvariableに設定すると遅延も失敗基準にできます。未設定は計測とエラー検知のみとし、実測を蓄積してから閾値を決めます。定点観測の少数サンプルであり、負荷試験や利用者全体のSLOとは区別します。統計の事前集計やキャッシュ導入は、この測定で効果が必要と分かってから判断します。

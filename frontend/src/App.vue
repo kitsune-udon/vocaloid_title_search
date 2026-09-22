@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import VideoSections from "./components/VideoSections.vue";
+import StatisticsView from "./components/StatisticsView.vue";
+import { useSongSearch } from "./composables/useSongSearch";
 import {
   BarChart3,
   ChevronLeft,
@@ -11,14 +14,13 @@ import {
   SlidersHorizontal,
   X,
 } from "@lucide/vue";
-import { computed, nextTick, onMounted, ref } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
 import {
   ApiError,
   fetchMetadata,
   fetchPopularityLabels,
   fetchStatistics,
   fetchSongDetail,
-  searchSongs,
 } from "./api";
 import type {
   ComposerBucket,
@@ -31,21 +33,9 @@ import type {
   SortOrder,
   StatisticsResponse,
   TitleLengthBucket,
-  VideoEntry,
-  VideoMap,
 } from "./types";
 
-interface SearchCriteria {
-  source: "stats" | null;
-  titleLength: number | null;
-  composer: string;
-  publishedYear: number | null;
-  sort: SortOrder;
-  popularityLabels: string[];
-  page: number;
-  pageSize: number;
-}
-
+const { searchResults, totalResults, currentPage, isSearching, lastSearchCriteria, search, cancelSearch } = useSongSearch();
 const titleLength = ref("");
 const composerQuery = ref("");
 const publishedYear = ref("");
@@ -53,16 +43,14 @@ const sort = ref<SortOrder>("popularity");
 const metadata = ref<MetadataResponse>({});
 const popularityLabels = ref<string[]>([]);
 const selectedPopularityLabels = ref<Set<string>>(new Set());
-const searchResults = ref<SearchResult[]>([]);
-const totalResults = ref(0);
-const currentPage = ref(1);
+
 const pageSize = ref<50 | 100 | 200>(50);
 const hasSearched = ref(false);
-const isSearching = ref(false);
+
 const status = ref("");
 const error = ref("");
 const formError = ref("");
-const lastSearchCriteria = ref<SearchCriteria | null>(null);
+
 const pendingSearchSource = ref<"stats" | null>(null);
 const expandedUrls = ref<Set<string>>(new Set());
 const detailCache = ref<Map<string, SongDetail>>(new Map());
@@ -83,17 +71,15 @@ const statistics = ref<StatisticsResponse | null>(null);
 const isStatsLoading = ref(false);
 const statsError = ref("");
 const activeStatsPanel = ref("title_length");
-const statsTouchStartX = ref<number | null>(null);
+
 const detailSlowTimers = new Map<string, number>();
 
-type ErrorContext = "initial" | "search" | "detail" | "stats";
+onUnmounted(() => {
 
-const statsPanels = [
-  { key: "title_length", label: "文字数" },
-  { key: "published_year", label: "公開年" },
-  { key: "popularity_label", label: "根拠タグ" },
-  { key: "composer", label: "作曲者" },
-] as const;
+  for (const timer of detailSlowTimers.values()) window.clearTimeout(timer);
+});
+
+type ErrorContext = "initial" | "search" | "detail" | "stats";
 
 const hasVisibleMetaColumns = computed(() => (
   showColumns.value.count
@@ -206,7 +192,7 @@ async function runStatsSearch(): Promise<void> {
 }
 
 async function executeSearch(page: number): Promise<void> {
-  if (isSearching.value) return;
+  cancelSearch();
   const parsedTitleLength = parseTitleLength(titleLength.value);
   if (parsedTitleLength === undefined) {
     formError.value = "文字数には0以上の整数を入力してください。";
@@ -221,45 +207,27 @@ async function executeSearch(page: number): Promise<void> {
   }
   const trimmedComposer = composerQuery.value.trim();
   const selectedLabels = selectedPopularityLabelList.value;
+  const selectedSort = sort.value;
+  const source = page === 1 ? pendingSearchSource.value : lastSearchCriteria.value?.source ?? null;
   formError.value = "";
   error.value = "";
   status.value = "検索中";
   hasSearched.value = true;
-  isSearching.value = true;
   try {
-    const response = await searchSongs(
-      parsedTitleLength,
-      sort.value,
-      selectedLabels,
-      trimmedComposer,
-      parsedPublishedYear,
-      page,
-      pageSize.value,
-    );
-    searchResults.value = response.results;
-    totalResults.value = response.total;
-    currentPage.value = response.page;
+    const response = await search({ titleLength: parsedTitleLength, sort: selectedSort,
+      popularityLabels: selectedLabels, composer: trimmedComposer, publishedYear: parsedPublishedYear,
+      page, pageSize: pageSize.value, source });
+    if (!response) return;
     expandedUrls.value = new Set();
-    lastSearchCriteria.value = {
-      source: page === 1 ? pendingSearchSource.value : lastSearchCriteria.value?.source ?? null,
-      titleLength: parsedTitleLength,
-      composer: trimmedComposer,
-      publishedYear: parsedPublishedYear,
-      sort: sort.value,
-      popularityLabels: selectedLabels,
-      page: response.page,
-      pageSize: response.page_size,
-    };
+    pendingSearchSource.value = null;
     status.value = response.total
       ? `${resultStart.value}-${resultEnd.value} / ${response.total}件`
       : "0件";
     filterOpen.value = false;
     await scrollToResults(page === 1 ? "smooth" : "auto");
   } catch (caught) {
-    renderError(userFacingError(caught, "search"));
-  } finally {
     pendingSearchSource.value = null;
-    isSearching.value = false;
+    renderError(userFacingError(caught, "search"));
   }
 }
 
@@ -375,37 +343,6 @@ async function showStats(): Promise<void> {
 async function showSearch(): Promise<void> {
   activeView.value = "search";
   await scrollToPageTop();
-}
-
-function selectStatsPanel(key: string): void {
-  activeStatsPanel.value = key;
-}
-
-function onStatsTouchStart(event: TouchEvent): void {
-  statsTouchStartX.value = event.changedTouches[0]?.clientX ?? null;
-}
-
-function onStatsTouchEnd(event: TouchEvent): void {
-  if (statsTouchStartX.value === null) return;
-  const endX = event.changedTouches[0]?.clientX ?? statsTouchStartX.value;
-  const delta = endX - statsTouchStartX.value;
-  statsTouchStartX.value = null;
-  if (Math.abs(delta) < 48) return;
-  moveStatsPanel(delta < 0 ? 1 : -1);
-}
-
-function moveStatsPanel(delta: number): void {
-  const currentIndex = statsPanels.findIndex((panel) => panel.key === activeStatsPanel.value);
-  const nextIndex = Math.min(statsPanels.length - 1, Math.max(0, currentIndex + delta));
-  activeStatsPanel.value = statsPanels[nextIndex].key;
-}
-
-function maxCount<T extends { count: number }>(items: T[]): number {
-  return Math.max(1, ...items.map((item) => item.count));
-}
-
-function barWidth(count: number, max: number): string {
-  return `${Math.max(4, Math.round((count / max) * 100))}%`;
 }
 
 function defaultPopularityLabelSet(labels: string[] = popularityLabels.value): Set<string> {
@@ -635,28 +572,6 @@ function creditRows(detail: SongDetail): Array<[string, string[]]> {
   return displayRows;
 }
 
-function allVideos(videos: VideoMap | undefined): Array<[string, VideoEntry]> {
-  if (!videos) return [];
-  return [
-    ...(videos.niconico ?? []).map((video): [string, VideoEntry] => ["ニコニコ", video]),
-    ...(videos.youtube ?? []).map((video): [string, VideoEntry] => ["YouTube", video]),
-  ];
-}
-
-function thumbnailUrl(video: VideoEntry): string {
-  return video.thumbnail_urls?.[0] || video.thumbnail_url;
-}
-
-function useNextThumbnail(event: Event, video: VideoEntry): void {
-  const image = event.target as HTMLImageElement;
-  const candidates = video.thumbnail_urls?.length ? video.thumbnail_urls : [video.thumbnail_url];
-  const currentIndex = Number.parseInt(image.dataset.thumbnailIndex || "0", 10);
-  const nextUrl = candidates[currentIndex + 1];
-  if (nextUrl) {
-    image.dataset.thumbnailIndex = String(currentIndex + 1);
-    image.src = nextUrl;
-  }
-}
 </script>
 
 <template>
@@ -943,42 +858,7 @@ function useNextThumbnail(event: Event, video: VideoEntry): void {
                         <li v-for="item in detailCache.get(row.url)?.introduction" :key="item">{{ item }}</li>
                       </ul>
                     </div>
-                    <div
-                      v-for="[sectionTitle, videos] in [
-                        ['動画', detailCache.get(row.url)?.videos],
-                        ['関連動画', detailCache.get(row.url)?.related_videos],
-                      ] as const"
-                      :key="sectionTitle"
-                      class="detail-section"
-                    >
-                      <template v-if="allVideos(videos).length">
-                        <div class="detail-title">{{ sectionTitle }}</div>
-                        <div class="video-grid">
-                          <a
-                            v-for="[service, video] in allVideos(videos)"
-                            :key="`${service}-${video.id}`"
-                            class="video-card"
-                            :href="video.url"
-                            target="_blank"
-                            rel="noreferrer"
-                            :title="video.title || service"
-                          >
-                            <img
-                              class="video-thumb"
-                              :src="thumbnailUrl(video)"
-                              :alt="video.title || service"
-                              data-thumbnail-index="0"
-                              loading="lazy"
-                              @error="useNextThumbnail($event, video)"
-                            />
-                            <span class="video-meta">
-                              <span class="video-name">{{ video.title || service }}</span>
-                              <span class="video-service">{{ service }}</span>
-                            </span>
-                          </a>
-                        </div>
-                      </template>
-                    </div>
+                    <VideoSections :detail="detailCache.get(row.url)!" />
                   </template>
                   <div v-else class="detail-loading">表示できる詳細情報が見つかりませんでした。</div>
                 </div>
@@ -1026,120 +906,9 @@ function useNextThumbnail(event: Event, video: VideoEntry): void {
       </div>
     </section>
     </template>
-    <section v-else class="stats-view" aria-label="統計">
-      <div v-if="statsError" class="empty">{{ statsError }}</div>
-      <div v-else-if="isStatsLoading || !statistics" class="empty">統計情報を読み込み中</div>
-      <template v-else>
-        <div class="stats-summary">
-          <div class="stat-card">
-            <span class="stat-label">総曲数</span>
-            <strong>{{ statistics.total_songs }}</strong>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">詳細取得済み</span>
-            <strong>{{ statistics.detail_count }}</strong>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">作曲者情報あり</span>
-            <strong>{{ statistics.with_composer }}</strong>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">公開年あり</span>
-            <strong>{{ statistics.with_published_year }}</strong>
-          </div>
-        </div>
-
-        <div class="stats-tabs" aria-label="統計カテゴリ">
-          <button
-            v-for="panel in statsPanels"
-            :key="panel.key"
-            type="button"
-            :class="{ active: activeStatsPanel === panel.key }"
-            :aria-pressed="activeStatsPanel === panel.key"
-            @click="selectStatsPanel(panel.key)"
-          >
-            {{ panel.label }}
-          </button>
-        </div>
-
-        <div class="stats-grid" @touchstart.passive="onStatsTouchStart" @touchend.passive="onStatsTouchEnd">
-          <section class="stats-panel" data-stats-panel="title_length" :class="{ active: activeStatsPanel === 'title_length' }">
-            <div class="stats-panel-title">タイトル文字数</div>
-            <div class="bar-list">
-              <button
-                v-for="bucket in statistics.by_title_length"
-                :key="bucket.length"
-                type="button"
-                class="bar-row"
-                @click="applyLengthFromStats(bucket)"
-              >
-                <span class="bar-label">{{ bucket.length }}文字</span>
-                <span class="bar-track">
-                  <span class="bar-fill" :style="{ width: barWidth(bucket.count, maxCount(statistics.by_title_length)) }"></span>
-                </span>
-                <span class="bar-count">{{ bucket.count }}</span>
-              </button>
-            </div>
-          </section>
-
-          <section class="stats-panel" data-stats-panel="published_year" :class="{ active: activeStatsPanel === 'published_year' }">
-            <div class="stats-panel-title">公開年</div>
-            <div class="bar-list">
-              <button
-                v-for="bucket in statistics.by_published_year"
-                :key="bucket.year"
-                type="button"
-                class="bar-row"
-                @click="applyYearFromStats(bucket)"
-              >
-                <span class="bar-label">{{ bucket.year }}</span>
-                <span class="bar-track">
-                  <span class="bar-fill" :style="{ width: barWidth(bucket.count, maxCount(statistics.by_published_year)) }"></span>
-                </span>
-                <span class="bar-count">{{ bucket.count }}</span>
-              </button>
-            </div>
-          </section>
-
-          <section class="stats-panel" data-stats-panel="popularity_label" :class="{ active: activeStatsPanel === 'popularity_label' }">
-            <div class="stats-panel-title">根拠タグ</div>
-            <div class="bar-list">
-              <button
-                v-for="bucket in statistics.by_popularity_label"
-                :key="bucket.label"
-                type="button"
-                class="bar-row"
-                @click="applyPopularityFromStats(bucket)"
-              >
-                <span class="bar-label">{{ bucket.label }}</span>
-                <span class="bar-track">
-                  <span class="bar-fill" :style="{ width: barWidth(bucket.count, maxCount(statistics.by_popularity_label)) }"></span>
-                </span>
-                <span class="bar-count">{{ bucket.count }}</span>
-              </button>
-            </div>
-          </section>
-
-          <section class="stats-panel" data-stats-panel="composer" :class="{ active: activeStatsPanel === 'composer' }">
-            <div class="stats-panel-title">作曲者</div>
-            <div class="bar-list">
-              <button
-                v-for="bucket in statistics.top_composers"
-                :key="bucket.name"
-                type="button"
-                class="bar-row"
-                @click="applyComposerFromStats(bucket)"
-              >
-                <span class="bar-label">{{ bucket.name }}</span>
-                <span class="bar-track">
-                  <span class="bar-fill" :style="{ width: barWidth(bucket.count, maxCount(statistics.top_composers)) }"></span>
-                </span>
-                <span class="bar-count">{{ bucket.count }}</span>
-              </button>
-            </div>
-          </section>
-        </div>
-      </template>
-    </section>
+    <StatisticsView v-else v-model="activeStatsPanel" :statistics="statistics"
+      :is-stats-loading="isStatsLoading" :stats-error="statsError"
+      @length="applyLengthFromStats" @year="applyYearFromStats"
+      @popularity="applyPopularityFromStats" @composer="applyComposerFromStats" />
   </main>
 </template>

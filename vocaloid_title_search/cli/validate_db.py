@@ -10,6 +10,7 @@ from pathlib import Path
 
 from vocaloid_title_search.cli.common import parser
 from vocaloid_title_search.database import DEFAULT_DB_PATH
+from vocaloid_title_search.quality_policy import QualityPolicy
 from vocaloid_title_search.database_quality import (
     DatabaseQualityReport,
     validate_database_quality,
@@ -31,7 +32,17 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         action="store_true",
         help="検査結果をJSONで出力します。",
     )
-    return arg_parser.parse_args(argv)
+    arg_parser.add_argument("--require-video-metadata", action="store_true", help="公開用: 両動画サービスの補完記録を必須にします。")
+    arg_parser.add_argument("--baseline-db", type=Path, help="比較する前回DB。")
+    arg_parser.add_argument("--max-count-drop", type=float, default=0.20)
+    arg_parser.add_argument("--max-coverage-drop", type=float, default=0.10)
+    arg_parser.add_argument("--min-video-success-rate", type=float, default=0.80)
+    args = arg_parser.parse_args(argv)
+    try:
+        args.policy = QualityPolicy(args.max_count_drop, args.max_coverage_drop, args.min_video_success_rate)
+    except ValueError as exc:
+        arg_parser.error(str(exc))
+    return args
 
 
 def print_text_report(report: DatabaseQualityReport) -> None:
@@ -46,6 +57,10 @@ def print_text_report(report: DatabaseQualityReport) -> None:
         print("warnings:")
         for warning in report.warnings:
             print(f"- {warning}")
+    if report.comparison:
+        print("comparison:")
+        for key, change in report.comparison.items():
+            print(f"- {key}: {change}")
     if report.counts:
         print("counts:")
         for key in sorted(report.counts):
@@ -58,7 +73,8 @@ def print_text_report(report: DatabaseQualityReport) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(sys.argv[1:] if argv is None else argv)
-    report = validate_database_quality(args.db_path)
+    report = validate_database_quality(args.db_path, require_video_metadata=args.require_video_metadata,
+                                       baseline_path=args.baseline_db, policy=args.policy)
     if args.json:
         print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
     else:

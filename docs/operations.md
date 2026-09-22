@@ -76,19 +76,23 @@ D1投入の影響範囲:
 
 SQLite DBを更新するのは `build_db` と `refresh_video_metadata` です。`tools/update_d1.sh` は既存SQLiteを読み、D1用SQLを生成して対象D1へ投入するだけです。
 
-まずSQLite DBを作成または更新します。
+公開用SQLiteは、リポジトリ直下で次の1コマンドから構築します。
 
 ```bash
-uv run --cache-dir .uv-cache python -m vocaloid_title_search.cli.build_db
+uv run --cache-dir .uv-cache python -m vocaloid_title_search.cli.build_db --with-video-metadata
 ```
 
-公開サイト用のDBでは、DB構築後に動画メタデータを必ず補完します。`build_db` は既存の補完結果を引き継がず、動画IDから推測したサムネイルURLに戻します。特にニコニコの実画像URLは推測URLと異なることがあるため、補完を省略するとサムネイルが表示されない場合があります。
+一時DBでWiki取得、ニコニコとYouTubeの動画メタデータ補完、品質検査を行い、すべて成功してからSQLiteを差し替えます。既存DBにある有効な動画情報も引き継ぎます。いずれかの処理が失敗した場合は既存DBを保持します。Wikiは指定したHTTP取得設定、動画補完は補完CLIの既定並列数・間隔を使います。
+
+動画情報だけの更新や、従来の `build_db` で作成したDBの補完には次を使います。
 
 ```bash
 uv run --cache-dir .uv-cache python -m vocaloid_title_search.cli.refresh_video_metadata
 ```
 
-補完結果の成功・失敗・フォールバック件数を確認し、代表曲の画像が取得できることを確認します。削除・非公開動画などは補完できない場合があります。
+サービスごとの対象数、成功数、失敗数、フォールバック数を確認します。取得対象のあるサービスで成功が0件の場合は、DBを変更せず失敗します。個別の取得失敗では既存の有効情報を保持しますが、削除・非公開などの動画は補完できない場合があります。代表曲の画像も確認します。
+
+`update_d1.sh` は `validate_db --require-video-metadata` を実行し、補完記録・動画IDの一致・サービスごとの取得成功を確認してから進みます。従来の補完済みDBにはこの記録がないため、初回だけ上の補完CLIを再実行してください。wrapperはプロジェクトの `.venv` があれば自動で使用します。依存未導入の場合は [usage.md](usage.md#setup) のセットアップを行います。
 
 その後、D1へ投入します。Terraform state がある場合、D1 database name と公開URLは自動解決され、投入後に公開APIの smoke test を実行します。stagingで確認してからproductionへ進めます。
 
@@ -211,6 +215,31 @@ staging確認を簡略化できることがある変更:
 | テストだけの追加 | 該当テストと `tools/check_all.sh` |
 
 迷う場合は staging を使います。個人運用では手順を短くするより、失敗時の切り分けができる状態を優先します。
+
+## Release Artifacts And Recovery
+
+`update_d1.sh` はSQLite backup APIで一貫したスナップショットを取り、その固定DBだけを検査・SQL生成に使います。投入には一意なbackupディレクトリ内のSQLを使い、`--sql-output` のファイルは参照用コピーです。
+
+投入前に、D1から取得した `remote-before.sql` からrollback SQLを作ります。ローカルSQLiteへ新SQLを投入した後でrollbackを適用し、旧アプリケーションテーブルの全行・列・索引と一致するかを検証します。Cloudflare側の実行成功を保証する検査ではないため、実際の投入後はsmoke testも必要です。
+
+各backupディレクトリに次を保存します。
+
+| ファイル | 用途 |
+| --- | --- |
+| `manifest.json` | Git revision、未コミット状態、ソースfingerprint、対象環境・DB、品質基準、成果物SHA-256、実行結果 |
+| `quality.json` | 固定DBの単体品質検査 |
+| `quality-comparison.json` | 直前D1との件数・充足率比較（既存データがある場合） |
+| `previous.sqlite3` | 直前D1のローカル比較用コピー |
+| `remote-before.sql`, `rollback.sql` | 取得した元SQLと復旧用SQL |
+| `new-vocaloid_titles.sqlite3`, `new-vocaloid_titles.sql` | 実際に検査・投入したデータ |
+
+投入直前にSHA-256を再検査し、生成後の改変を拒否します。manifestは `verified`（smoke成功）、`loaded_unverified`（smoke省略）、`import_failed`、`smoke_failed`、その他の失敗を区別します。投入やsmokeが失敗した場合は、表示されるrollbackコマンドと既存の復旧手順を確認します。自動rollbackは行いません。
+
+生成物は `release/` に保存し、Gitへ追加しません。任意の過去releaseをローカルで再確認する場合:
+
+```bash
+python3 tools/release_artifacts.py verify --directory release/backups/staging/RELEASE_ID
+```
 
 ## Infrastructure Change
 
@@ -405,7 +434,11 @@ Worker logsで見る代表的な兆候:
 
 Pages は Cloudflare Dashboard の Pages deployments から以前のデプロイを再昇格できます。
 
-D1 への投入はテーブル置換を伴うため、直前のSQLがない場合は即時rollbackできません。`tools/update_d1.sh` は `release/backups/<env>/<timestamp>/` に更新前後のDB/SQLを保存します。smoke test が失敗した場合は、更新前SQLをD1へ再投入するrollbackコマンドを表示します。
+`tools/update_d1.sh` は投入直前のリモートD1をexportし、SQLiteへの読み込みと整合性検査を通した `rollback.sql` を作成します。バックアップ取得・検査に失敗した場合は投入しません。復旧対象はアプリの4テーブルです。4テーブルがすべて未作成の初期DBは投入可能で、rollbackは作成した4テーブルを削除して初期状態に戻します。一部だけ欠けたDBは停止します。
+
+`release/backups/<env>/<timestamp>-<suffix>/` には `remote-before.sql`、`rollback.sql`、今回投入する `new-vocaloid_titles.sqlite3` と `new-vocaloid_titles.sql` が残ります。前回ローカル生成SQLをリモートの現状とみなさず、実際の投入先から復旧用データを保存します。exportにはD1の読み取り権限も必要です。同一checkoutでは、DB名に対応する `flock` が並行更新を拒否します。別checkout・別ホストからの更新までは排他しないため、更新担当を一本化します。
+
+smoke test が失敗した場合は `rollback.sql` を同じD1へ再投入するコマンドを表示します。途中の通信エラーでは現在の状態を確認してから復旧します。SQL生成は一時ファイルから原子的に差し替えるため、生成失敗で前回SQLを切り詰めません。
 
 rollbackコマンドも Terraform import ではありません。保存済みSQLを同じD1へ読み込ませ、D1のデータ内容を更新前の状態へ戻す操作です。
 

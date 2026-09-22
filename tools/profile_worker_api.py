@@ -5,6 +5,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
+from datetime import datetime, timezone
+from pathlib import Path
+import urllib.error
 import statistics
 import time
 import urllib.parse
@@ -42,6 +46,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--timeout", type=float, default=10.0)
     parser.add_argument("--repeat", type=int, default=3)
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--output", type=Path)
+    parser.add_argument("--redact-base-url", action="store_true")
+    parser.add_argument("--interval", type=float, default=0.2)
+    parser.add_argument("--max-p95-ms", type=float, default=0, help="0 disables the latency gate; errors always fail.")
     return parser.parse_args()
 
 
@@ -50,16 +58,24 @@ def main() -> int:
     if args.repeat < 1:
         raise SystemExit("--repeat must be 1 or greater")
 
+    if not math.isfinite(args.timeout) or args.timeout <= 0 or not math.isfinite(args.interval) or args.interval < 0 or not math.isfinite(args.max_p95_ms) or args.max_p95_ms < 0:
+        raise SystemExit("timeout must be positive; interval and max-p95-ms must be nonnegative and finite")
     base_url = args.base_url.rstrip("/")
     results = [
-        measure_request(base_url, request, timeout=args.timeout, repeat=args.repeat)
+        measure_request(base_url, request, timeout=args.timeout, repeat=args.repeat, interval=args.interval)
         for request in representative_requests()
     ]
+    report = {"base_url": "configured" if args.redact_base_url else base_url,
+              "measured_at": datetime.now(timezone.utc).isoformat(), "repeat": args.repeat, "results": results}
+    encoded = json.dumps(report, ensure_ascii=False, indent=2)
+    if args.output:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(encoded + "\n")
     if args.json:
-        print(json.dumps({"base_url": base_url, "repeat": args.repeat, "results": results}, ensure_ascii=False, indent=2))
+        print(encoded)
     else:
-        print_text_report(base_url, args.repeat, results)
-    return 0
+        print_text_report(report["base_url"], args.repeat, results)
+    return int(any(result["errors"] or (args.max_p95_ms and result["p95_ms"] > args.max_p95_ms) for result in results))
 
 
 def measure_request(
@@ -68,13 +84,26 @@ def measure_request(
     *,
     timeout: float,
     repeat: int,
+    interval: float = 0,
 ) -> dict[str, object]:
     durations: list[float] = []
     status = 0
     bytes_read = 0
-    for _ in range(repeat):
+    errors = 0
+    statuses: dict[str, int] = {}
+    for attempt in range(repeat):
+        if attempt and interval:
+            time.sleep(interval)
         started_at = time.perf_counter()
-        status, bytes_read = fetch_once(f"{base_url}{request.path}", timeout)
+        try:
+            status, bytes_read = fetch_once(f"{base_url}{request.path}", timeout)
+        except urllib.error.HTTPError as exc:
+            status, bytes_read = exc.code, 0
+            exc.close()
+        except (urllib.error.URLError, TimeoutError, OSError):
+            status, bytes_read = 0, 0
+        errors += int(status != 200)
+        statuses[str(status)] = statuses.get(str(status), 0) + 1
         durations.append((time.perf_counter() - started_at) * 1000)
     return {
         "name": request.name,
@@ -84,6 +113,10 @@ def measure_request(
         "min_ms": round(min(durations), 2),
         "median_ms": round(statistics.median(durations), 2),
         "max_ms": round(max(durations), 2),
+        "p95_ms": round(sorted(durations)[math.ceil(len(durations) * 0.95) - 1], 2),
+        "errors": errors,
+        "error_rate": errors / repeat,
+        "statuses": statuses,
     }
 
 
@@ -102,11 +135,11 @@ def fetch_once(url: str, timeout: float) -> tuple[int, int]:
 
 def print_text_report(base_url: str, repeat: int, results: list[dict[str, object]]) -> None:
     print(f"Worker API profile: {base_url} repeat={repeat}")
-    print("name\tstatus\tbytes\tmin_ms\tmedian_ms\tmax_ms")
+    print("name\tstatus\tbytes\tmin_ms\tmedian_ms\tp95_ms\terror_rate")
     for result in results:
         print(
             f"{result['name']}\t{result['status']}\t{result['bytes']}\t"
-            f"{result['min_ms']}\t{result['median_ms']}\t{result['max_ms']}"
+            f"{result['min_ms']}\t{result['median_ms']}\t{result['p95_ms']}\t{result['error_rate']:.1%}"
         )
 
 

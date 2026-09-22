@@ -34,6 +34,55 @@ test("searches songs, opens detail, paginates, and applies stats filters", async
   await expect(page.getByText("7文字")).toBeVisible();
 });
 
+test("a newer stats search supersedes an in-flight search", async ({ page }) => {
+  let releaseOld!: () => void;
+  const oldResponse = new Promise<void>(resolve => { releaseOld = resolve; });
+  await page.route("**/api/search?**", async route => {
+    const length = new URL(route.request().url()).searchParams.get("length");
+    if (length === "3") {
+      await oldResponse;
+      await route.fulfill({ json: { total: 1, page: 1, page_size: 50,
+        results: [song("古い検索結果", 3, "https://w.atwiki.jp/hmiku/pages/82.html", 2007)] } });
+    } else {
+      await route.fallback();
+    }
+  });
+  await page.goto("/");
+  await page.getByLabel("文字数").fill("3");
+  const started = page.waitForRequest(request => request.url().includes("/api/search?"));
+  await page.getByLabel("検索", { exact: true }).getByRole("button", { name: "検索" }).click();
+  await started;
+  await page.getByRole("button", { name: "統計" }).click();
+  await page.getByRole("button", { name: /7文字/ }).click();
+  try {
+    await expect(page.getByText("きゅうくらりん", { exact: true })).toBeVisible();
+  } finally {
+    releaseOld();
+  }
+  await expect(page.getByText("古い検索結果", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("統計から適用")).toBeVisible();
+});
+
+test("video thumbnails recover from a failed first candidate", async ({ page }) => {
+  await page.route("**/api/song-detail?**", route => route.fulfill({ json: {
+    ...songDetail,
+    videos: { niconico: [{ id: "sm1", title: "検証動画", url: "https://example.test/video",
+      thumbnail_url: "https://example.test/thumb-broken.png",
+      thumbnail_urls: ["https://example.test/thumb-broken.png", "https://example.test/thumb-good.png"] }], youtube: [] },
+  } }));
+  await page.route("https://example.test/thumb-broken.png", route => route.fulfill({ status: 404 }));
+  await page.route("https://example.test/thumb-good.png", route => route.fulfill({ contentType: "image/png",
+    body: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aD1sAAAAASUVORK5CYII=", "base64") }));
+  await page.goto("/");
+  await page.getByLabel("文字数").fill("3");
+  await page.getByLabel("検索", { exact: true }).getByRole("button", { name: "検索" }).click();
+  await page.getByRole("button", { name: /メルトの詳細を開く/ }).click();
+  const image = page.getByRole("img", { name: "検証動画" });
+  await image.scrollIntoViewIfNeeded();
+  await expect(image).toHaveAttribute("data-thumbnail-index", "1");
+  await expect.poll(() => image.evaluate(node => (node as HTMLImageElement).naturalWidth)).toBe(1);
+});
+
 async function mockApi(page: Page): Promise<void> {
   await page.route("**/api/metadata", async (route) => {
     await route.fulfill({ json: metadata });

@@ -14,7 +14,7 @@ CLI は役割ごとに module を分けています。この文書はオプシ�
 
 | Command | 外部ネットワーク | 書き込み |
 | --- | --- | --- |
-| `build_db` | 初音ミク Wiki | ローカルSQLiteを差し替える |
+| `build_db` | 初音ミク Wiki（`--with-video-metadata` 時は両動画サービスも） | ローカルSQLiteを差し替える |
 | `refresh_video_metadata` | YouTube / ニコニコ | ローカルSQLite内の詳細JSONを更新 |
 | `validate_db` | なし | なし |
 | `report_detail_quality` | なし | なし |
@@ -39,6 +39,9 @@ uv run --cache-dir .uv-cache python -m vocaloid_title_search.cli.build_db
 | `--db-path` | `vocaloid_titles.sqlite3` | SQLite DB の保存先 |
 | `--source-url` | 殿堂入りタグURL | 曲一覧の代表取得元 |
 | `--workers` | `8` | 曲詳細ページ取得の最大並列数 |
+| `--resume` | `false` | チェックポイントを保持し、保存済み詳細を再取得せず再開する |
+| `--reuse-details-days` | `0`（無効） | 指定日数内の詳細を前回DBから再利用。指定する値は正の整数 |
+| `--with-video-metadata` | `false` | 両動画サービスの補完・公開品質検査後にDBを差し替える。動画補完は32並列・間隔0秒、タイムアウトと再試行設定は共通 |
 | `--timeout` | `20.0` | 1 HTTP リクエストのタイムアウト秒数 |
 | `--request-interval` | `0.2` | 同一ホストへの最小リクエスト間隔秒数 |
 | `--max-retries` | `2` | 429/502/503/504 の最大リトライ回数 |
@@ -88,6 +91,11 @@ uv run --cache-dir .uv-cache python -m vocaloid_title_search.cli.validate_db
 | Option | Default | 内容 |
 | --- | ---: | --- |
 | `--db-path` | `vocaloid_titles.sqlite3` | 検査対象の SQLite DB |
+| `--require-video-metadata` | `false` | サービス別補完記録・動画IDの一致・取得成功率を必須にする |
+| `--baseline-db` | なし | 前回DBとの件数・充足率比較 |
+| `--max-count-drop` | `0.20` | 比較時に許容する件数の減少割合 |
+| `--max-coverage-drop` | `0.10` | 比較時に許容する充足率・取得成功率の低下幅 |
+| `--min-video-success-rate` | `0.80` | 公開用動画補完の最低取得成功率 |
 | `--json` | `false` | 検査結果をJSONで出力 |
 
 このコマンドはDBへ書き込まず、外部ネットワークにもアクセスしません。次の項目を確認します。

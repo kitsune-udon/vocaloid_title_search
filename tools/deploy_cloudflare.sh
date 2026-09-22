@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck disable=SC1091
 source "$ROOT_DIR/tools/lib.sh"
+configure_project_python "$ROOT_DIR"
 WORKER_DIR="${VOCALOID_WORKER_DIR:-$ROOT_DIR/cloudflare/worker}"
 FRONTEND_DIR="${VOCALOID_FRONTEND_DIR:-$ROOT_DIR/frontend}"
 NODE_VERSION="$(project_node_version "$ROOT_DIR")"

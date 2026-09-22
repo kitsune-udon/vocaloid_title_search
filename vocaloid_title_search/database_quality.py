@@ -17,6 +17,10 @@ from vocaloid_title_search.database import (
 )
 
 
+from vocaloid_title_search.video_metadata import video_ids_fingerprint
+from vocaloid_title_search.quality_policy import QualityPolicy, compare_counts, video_refresh_errors
+
+
 REQUIRED_TABLES = {"songs", "metadata", "song_details", "song_credit_people"}
 REQUIRED_QUALITY_METADATA_KEYS = REQUIRED_METADATA_KEYS | {
     "detail_count",
@@ -33,6 +37,7 @@ class DatabaseQualityReport:
     metadata: dict[str, str] = field(default_factory=dict)
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    comparison: dict[str, object] = field(default_factory=dict)
 
     @property
     def ok(self) -> bool:
@@ -46,16 +51,22 @@ class DatabaseQualityReport:
             "metadata": self.metadata,
             "errors": self.errors,
             "warnings": self.warnings,
+            "comparison": self.comparison,
         }
 
 
-def validate_database_quality(db_path: Path) -> DatabaseQualityReport:
+def validate_database_quality(db_path: Path, *, require_video_metadata: bool = False,
+                              baseline_path: Path | None = None, policy: QualityPolicy = QualityPolicy()) -> DatabaseQualityReport:
     """Validate DB readiness and report useful data quality counts."""
 
     errors: list[str] = []
     warnings: list[str] = []
     counts: dict[str, int] = {}
     metadata: dict[str, str] = {}
+    comparison: dict[str, object] = {}
+    baseline = validate_database_quality(baseline_path) if baseline_path is not None else None
+    if baseline is not None and not baseline.ok:
+        errors.append("baseline database failed quality checks: " + "; ".join(baseline.errors))
 
     if not db_path.exists():
         return DatabaseQualityReport(
@@ -75,12 +86,30 @@ def validate_database_quality(db_path: Path) -> DatabaseQualityReport:
 
             metadata = dict(connection.execute("SELECT key, value FROM metadata"))
             counts.update(load_core_counts(connection))
-            detail_json_counts = count_detail_json_values(connection)
+            video_ids = {"niconico": set(), "youtube": set()}
+            detail_json_counts = count_detail_json_values(connection, video_ids)
             counts.update(detail_json_counts)
             errors.extend(validate_metadata(metadata, counts))
             errors.extend(validate_relations(connection))
             errors.extend(validate_detail_json_counts(detail_json_counts))
             warnings.extend(validate_coverage(counts))
+            if require_video_metadata:
+                for service in ("niconico", "youtube"):
+                    prefix = f"video_metadata_{service}_"
+                    total = counts[f"{service}_unique_videos"]
+                    if not total:
+                        continue
+                    if (
+                        not metadata.get(prefix + "fetched_at")
+                        or metadata.get(prefix + "total") != str(total)
+                        or metadata.get(prefix + "ids_sha256") != video_ids_fingerprint(video_ids[service])
+                    ):
+                        errors.append(f"{service} metadata refresh is missing or stale; run refresh_video_metadata")
+                    errors.extend(video_refresh_errors(metadata, service, total, policy,
+                                                       baseline.metadata if baseline else None))
+            if baseline is not None and baseline.ok:
+                comparison, regressions = compare_counts(counts, baseline.counts, policy)
+                errors.extend(regressions)
     except sqlite3.DatabaseError as exc:
         errors.append(f"database read failed: {exc}")
 
@@ -90,6 +119,7 @@ def validate_database_quality(db_path: Path) -> DatabaseQualityReport:
         metadata=metadata,
         errors=errors,
         warnings=warnings,
+        comparison=comparison,
     )
 
 
@@ -130,7 +160,9 @@ def scalar_count(
     return int(connection.execute(sql, parameters).fetchone()[0])
 
 
-def count_detail_json_values(connection: sqlite3.Connection) -> dict[str, int]:
+def count_detail_json_values(
+    connection: sqlite3.Connection, video_ids: dict[str, set[str]] | None = None,
+) -> dict[str, int]:
     counts = {
         "invalid_detail_json": 0,
         "videos": 0,
@@ -138,6 +170,7 @@ def count_detail_json_values(connection: sqlite3.Connection) -> dict[str, int]:
         "videos_with_thumbnail": 0,
         "videos_with_title": 0,
     }
+    unique_ids = video_ids if video_ids is not None else {"niconico": set(), "youtube": set()}
     rows = connection.execute("SELECT payload_json FROM song_details")
     for (payload_json,) in rows:
         try:
@@ -145,8 +178,22 @@ def count_detail_json_values(connection: sqlite3.Connection) -> dict[str, int]:
         except json.JSONDecodeError:
             counts["invalid_detail_json"] += 1
             continue
+        if not isinstance(detail, dict):
+            counts["invalid_detail_json"] += 1
+            continue
+        for section_name in ("videos", "related_videos"):
+            section = detail.get(section_name)
+            if isinstance(section, dict):
+                for service in unique_ids:
+                    entries = section.get(service, [])
+                    if isinstance(entries, list):
+                        unique_ids[service].update(
+                            item["id"] for item in entries
+                            if isinstance(item, dict) and isinstance(item.get("id"), str) and item["id"]
+                        )
         count_video_list(detail.get("videos"), counts, "videos")
         count_video_list(detail.get("related_videos"), counts, "related_videos")
+    counts.update({f"{service}_unique_videos": len(ids) for service, ids in unique_ids.items()})
     return counts
 
 

@@ -17,10 +17,10 @@ export class ApiError extends Error {
   }
 }
 
-async function fetchJson<T>(url: string): Promise<T> {
+async function fetchJson<T>(url: string, signal?: AbortSignal): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(url);
+    response = await fetch(url, { signal });
   } catch (caught) {
     const message = caught instanceof Error ? caught.message : "network error";
     throw new ApiError(null, message);
@@ -69,6 +69,7 @@ export function searchSongs(
   publishedYear: number | null,
   page: number,
   pageSize: number,
+  signal?: AbortSignal,
 ): Promise<SearchResponse> {
   const params = new URLSearchParams({
     sort,
@@ -87,7 +88,7 @@ export function searchSongs(
   if (composer) {
     params.set("composer", composer);
   }
-  return fetchJson<SearchResponse>(`/api/search?${params.toString()}`);
+  return fetchJson<SearchResponse>(`/api/search?${params.toString()}`, signal);
 }
 
 export function fetchSongDetail(url: string): Promise<SongDetail> {

@@ -44,3 +44,11 @@ print_operation_summary() {
   Smoke checks: $smoke
 SUMMARY
 }
+
+# Select installed project dependencies without installing or changing lockfiles.
+configure_project_python() {
+  local root_dir="$1"
+  if [[ -x "$root_dir/.venv/bin/python3" ]]; then
+    export PATH="$root_dir/.venv/bin:$PATH"
+  fi
+}

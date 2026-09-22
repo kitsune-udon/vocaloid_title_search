@@ -321,3 +321,9 @@ CORSを変更した場合は、staging / production の両方で確認します�
 | stagingだけ失敗 | staging custom domainのorigin漏れ | staging Worker env |
 | productionだけ失敗 | production custom domainのorigin漏れ | production Worker env |
 | preflightが失敗 | allowed headers / methods不足 | Worker CORS処理 |
+
+## Query Validation And Database Reads
+
+数値queryはJavaScriptの安全な整数範囲で検証し、ページoffsetの乗算結果も範囲外なら `400` を返します。形式不正の検索条件やWiki URLはD1アクセス前に拒否するため、DB未準備時も入力エラーが優先されます。
+
+DB readinessのmetadata・件数確認、および検索の件数・結果取得はそれぞれbatchで実行します。根拠タグ未指定の検索ではタグ一覧を取得しません。レスポンス形式と並び順は維持します。

@@ -177,6 +177,6 @@ tools/check_docs.sh
 - 検索CLIはDB専用です。DBなしでWikiへ直接取りに行く機能は削除しました。
 - Wikiへのネットワーク取得はDB構築に限定します。
 - DB構築CLIは既定で同一ホストへのリクエスト間隔を0.2秒空け、HTTP 429/502/503/504 はバックオフして再試行します。
-- 動画メタデータ取得はDB構築後に `refresh_video_metadata` CLIで実行します。DB構築中には取得しません。
+- 公開用DBは `build_db --with-video-metadata` で動画補完・検査まで一括実行します。動画情報だけの更新には `refresh_video_metadata` CLIを使います。
 - Cloudflare の永続リソースは `infra/cloudflare` の Terraform で管理します。
 - Cloudflare D1 を更新する場合は `tools/update_d1.sh --env staging|production` を使います。Terraform state があればD1名と公開URLを自動解決し、更新後に公開APIの smoke test を実行します。smoke test は公開経路と主要APIの短い疎通確認です。

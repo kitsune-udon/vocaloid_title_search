@@ -19,6 +19,9 @@ vocaloid_title_search/
                      検索CLI本体
 
 frontend/
+  src/components/    統計ビュー、動画カード
+  src/composables/   検索の状態・競合リクエスト制御
+  tests/integration/ 実Worker + local D1を通すPlaywright tests
   src/               Vue + TypeScript UI
   tests/e2e/         Playwright E2E smoke tests
   playwright.config.ts
@@ -33,6 +36,7 @@ cloudflare/
 infra/
   cloudflare/        Terraform for Pages, DNS, D1, Worker routes
 
+.github/workflows/   CIと公開APIの定期性能測定
 docs/                設計・運用ドキュメント
 docs-site/           VitePress docs preview
 tests/               Python unit tests
@@ -151,3 +155,13 @@ vocaloid_titles.sqlite3
 | `cloudflare/worker/wrangler.toml` | 実D1 IDやCORS originを含むローカル設定 |
 | `release/` | D1 SQL、backup、deploy用生成物 |
 | `vocaloid_titles.sqlite3` | 生成済みローカルSQLite |
+
+## Build And Release Modules
+
+- `build_checkpoint.py`: 構築ロック、チェックポイント識別、Wiki取得日時による詳細再利用。
+- `quality_policy.py`: 前回比と動画成功率の基準。`database_quality.py` がDBの実測値と照合。
+- `detail.py`: 詳細抽出の組み立て、クレジット・読み・紹介文。
+- `detail_videos.py`: 動画ID・セクション・サムネイル候補。外部通信を行わない。
+- `detail_text.py`: 抽出モジュール共通のHTML・テキスト処理。
+- `tools/release_artifacts.py`: 公開用固定DB、品質レポート、manifest、復旧リハーサル。
+- `tools/prepare_integration_db.py`: 公開DBを使わない結合テスト用データの生成。

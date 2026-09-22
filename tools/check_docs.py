@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import re
 import sys
-from collections import Counter, defaultdict
+from collections import Counter
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
@@ -141,7 +141,6 @@ def is_external_or_special(link: str) -> bool:
     return (
         "://" in link
         or link.startswith("mailto:")
-        or link.startswith("#")
         or link.startswith("/")
     )
 

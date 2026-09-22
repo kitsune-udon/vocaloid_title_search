@@ -1,15 +1,21 @@
+import json
 import sqlite3
 import unittest
-from contextlib import redirect_stdout
+from contextlib import closing, redirect_stdout
 from io import StringIO
 
 from tests.helpers import MELT_URL, raw_song, temporary_db
 from vocaloid_title_search.cli.report_detail_quality import main as report_detail_quality_main
 from vocaloid_title_search.database import save_song_detail_entry
-from vocaloid_title_search.detail_quality import report_detail_quality
+from vocaloid_title_search.detail_quality import detail_issue_checks, report_detail_quality
 
 
 class DetailQualityTests(unittest.TestCase):
+    def test_non_object_json_is_reported_as_invalid(self) -> None:
+        for value in (None, [], "text", 42, True):
+            with self.subTest(value=value):
+                self.assertEqual(detail_issue_checks(json.dumps(value), None), ["invalid_json"])
+
     def test_report_counts_missing_detail_fields(self) -> None:
         with temporary_db([raw_song()]) as db_path:
             save_song_detail_entry(
@@ -112,11 +118,12 @@ class DetailQualityTests(unittest.TestCase):
                     "videos": {"niconico": [{"id": "sm1715919"}], "youtube": []},
                 },
             )
-            with sqlite3.connect(db_path) as connection:
+            with closing(sqlite3.connect(db_path)) as connection:
                 connection.execute(
                     "UPDATE song_details SET published_year = ? WHERE url = ?",
                     (2008, MELT_URL),
                 )
+                connection.commit()
 
             report = report_detail_quality(db_path)
 

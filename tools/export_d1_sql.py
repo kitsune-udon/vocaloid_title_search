@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import os
+import tempfile
 import re
 import sqlite3
 import sys
@@ -17,22 +19,55 @@ TABLES = ["songs", "metadata", "song_details", "song_credit_people"]
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--db-path", type=Path, default=Path("vocaloid_titles.sqlite3"))
+    parser.add_argument("--from-sql", type=Path, help="Convert a remote D1 export into validated replacement SQL.")
     parser.add_argument("--output", type=Path, default=Path("release/d1/vocaloid_titles.sql"))
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
+    if args.from_sql:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        with closing(sqlite3.connect(":memory:")) as connection:
+            connection.executescript(args.from_sql.read_text(encoding="utf-8"))
+            existing_tables = {row[0] for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            )}
+            empty_database = not existing_tables.intersection(TABLES)
+            if not empty_database:
+                validate_database(connection)
+            export_atomic(connection, args.output, empty_database=empty_database)
+        print(f"Prepared rollback SQL: {args.output}")
+        return 0
     if not args.db_path.exists():
         print(f"DB not found: {args.db_path}", file=sys.stderr)
         return 2
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with closing(sqlite3.connect(f"file:{args.db_path}?mode=ro", uri=True)) as connection:
         validate_database(connection)
-        with args.output.open("w", encoding="utf-8", newline="\n") as output:
-            write_export(connection, output)
+        export_atomic(connection, args.output)
     print(f"Exported D1 SQL: {args.output}")
     return 0
+
+
+def export_atomic(connection: sqlite3.Connection, output_path: Path, *, empty_database: bool = False) -> None:
+    temporary_path = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", newline="\n",
+                                         dir=output_path.parent, prefix=f".{output_path.name}.",
+                                         delete=False) as output:
+            temporary_path = Path(output.name)
+            if empty_database:
+                for table in reversed(TABLES):
+                    output.write(f"DROP TABLE IF EXISTS {table};\n")
+            else:
+                write_export(connection, output)
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(temporary_path, output_path)
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
 
 
 def validate_database(connection: sqlite3.Connection) -> None:
@@ -64,6 +99,7 @@ def write_export(connection: sqlite3.Connection, output) -> None:
         SELECT sql
         FROM sqlite_master
         WHERE type = 'index' AND sql IS NOT NULL
+          AND tbl_name IN ('songs', 'metadata', 'song_details', 'song_credit_people')
         ORDER BY name
         """
     ):

@@ -261,7 +261,14 @@ def load_paged_titles(
             SELECT
                 songs.title,
                 songs.title_length,
-                COALESCE(composers.composer_names, ''),
+                COALESCE((
+                    SELECT GROUP_CONCAT(name, ' / ')
+                    FROM (
+                        SELECT name FROM song_credit_people
+                        WHERE song_url = songs.song_url AND role = 'composer'
+                        ORDER BY name
+                    )
+                ), ''),
                 songs.artist_note,
                 songs.song_url,
                 songs.popularity_score,
@@ -269,16 +276,6 @@ def load_paged_titles(
                 song_details.published_year
             FROM songs
             JOIN song_details ON song_details.url = songs.song_url
-            LEFT JOIN (
-                SELECT song_url, GROUP_CONCAT(name, ' / ') AS composer_names
-                FROM (
-                    SELECT song_url, name
-                    FROM song_credit_people
-                    WHERE role = 'composer'
-                    ORDER BY name
-                )
-                GROUP BY song_url
-            ) composers ON composers.song_url = songs.song_url
             {sql_where_clause(where_clauses)}
             ORDER BY {sql_order_by(sort_order)}
             {limit_clause}
@@ -532,7 +529,7 @@ def save_song_detail(
             json.dumps(detail, ensure_ascii=False, separators=(",", ":")),
             detail_published_year(detail),
             fetched_at,
-            "",
+            fetched_at,
             DETAIL_SCHEMA_VERSION,
         ),
     )

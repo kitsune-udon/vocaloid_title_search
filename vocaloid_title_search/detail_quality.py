@@ -111,6 +111,9 @@ def detail_issue_checks(payload_json: str, stored_year: int | None) -> list[str]
     except json.JSONDecodeError:
         return ["invalid_json"]
 
+    if not isinstance(detail, dict):
+        return ["invalid_json"]
+
     checks: list[str] = []
     credits = detail.get("credits")
     if not isinstance(credits, dict) or not credits:

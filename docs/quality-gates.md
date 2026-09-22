@@ -53,7 +53,7 @@ tools/deploy_cloudflare.sh --env staging --dry-run
 | 検索流入抑制metadataが保たれている | `python3 tools/check_frontend_metadata.py` | `robots.txt`、`noindex`、OGP/Twitter/structured data追加を確認する |
 | 基本セキュリティヘッダーが保たれている | `python3 tools/check_frontend_metadata.py`, Worker tests | Pages `_headers` と Worker API response headers を確認する |
 | API contract の正本が共有型に寄っている | `python3 tools/check_api_contract_sources.py` | Worker、frontend、docsが `shared/api-types.ts` を参照する形へ戻す |
-| SQLite DB が公開投入できる状態 | `python -m vocaloid_title_search.cli.validate_db` | metadata、詳細件数、JSON破損、schema versionを直す |
+| SQLite DB が公開投入できる状態 | `python -m vocaloid_title_search.cli.validate_db --require-video-metadata` | metadata、詳細件数、JSON破損、schema versionを直す |
 | 詳細抽出の品質候補を把握している | `python -m vocaloid_title_search.cli.report_detail_quality --limit 20` | 欠損候補を確認し、必要なら抽出改善タスクを追加する |
 | D1投入で変更される対象が分かる | `tools/update_d1.sh --env staging --dry-run` | database name、SQL path、public URLを確認する |
 | Pages / Worker deploy対象が分かる | `tools/deploy_cloudflare.sh --env staging --dry-run` | Pages project、Worker env、smoke test対象URLを確認する |
@@ -69,9 +69,16 @@ tools/deploy_cloudflare.sh --env staging --dry-run
 | `metadata.detail_schema_version` | 実装が期待する値と一致 |
 | `metadata.song_count` | `songs` 件数と一致 |
 | `metadata.detail_count` | `song_details` 件数と一致 |
-| 詳細JSON | 破損が0件 |
+| 詳細JSON | 破損・object以外が0件 |
+| 公開用動画補完 | 対象のある両サービスで取得成功率80%以上、集計件数と動画IDが一致 |
 | 作曲者派生テーブル | 空でない |
 | 公開年 | 空でない |
+
+前回DBと比較する場合、曲数・作曲者あり件数・公開年あり件数・各サービスの動画ID数が20%を超えて減少すると停止します。作曲者・公開年の充足率、記録のある動画取得成功率が10ポイントを超えて低下しても停止します。新規曲の増加で欠損が隠れることを防ぐため、絶対件数と率を別々に見ます。
+
+これは初期の運用基準です。削除・非公開動画を考慮して100%成功は要求しません。保持した旧動画情報は `retained` として記録し、今回の取得成功に加算しません。失敗した場合は比較レポートと抽出元を確認し、正常なデータ変更と確認できた場合に `QualityPolicy` の基準をテスト・文書と一緒に変更します。`validate_db` 単独の閾値オプションは調査用で、D1投入wrapperの検査基準を迂回しません。
+
+`build_db` は既存ローカルDB、`update_d1.sh` は投入先から取得した直前DBを比較元とします。初回の空D1では比較のみを省略し、単体品質検査と空状態への復旧確認は行います。
 
 ## API Quality
 

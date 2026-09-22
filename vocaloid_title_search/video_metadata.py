@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 import sys
@@ -14,11 +15,11 @@ from contextlib import closing
 from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
-from typing import Callable, Iterator
+from typing import Callable, Iterable, Iterator
 
 from vocaloid_title_search.database import ensure_database, load_song_detail_payloads
-from vocaloid_title_search.detail import (
-    clean_text,
+from vocaloid_title_search.detail_text import clean_text
+from vocaloid_title_search.detail_videos import (
     fallback_niconico_thumbnail_url,
     fallback_niconico_thumbnail_urls,
     fallback_youtube_thumbnail_urls,
@@ -41,17 +42,30 @@ def refresh_stored_video_metadata(
     max_workers: int,
     timeout: float,
     progress: ProgressCallback | None = None,
+    previous_db_path: Path | None = None,
 ) -> int:
     started_at = time.perf_counter()
     try:
         detail_rows = load_song_detail_payloads(db_path)
-    except sqlite3.DatabaseError as exc:
+    except (sqlite3.DatabaseError, ValueError) as exc:
         print(f"DBの読み込みに失敗しました: {exc}", file=sys.stderr)
+        return 1
+    if any(not isinstance(detail, dict) for _, detail in detail_rows):
+        print("曲詳細JSONはobjectである必要があります。", file=sys.stderr)
         return 1
     if not detail_rows:
         print("曲詳細がDBにありません。先にDBを構築してください。", file=sys.stderr)
         return 1
 
+    if previous_db_path is not None and previous_db_path.exists():
+        saved: VideoMetadataByService = {"niconico": {}, "youtube": {}}
+        for _, detail in load_song_detail_payloads(previous_db_path):
+            for service, video in iter_detail_videos(detail):
+                video_id = video.get("id")
+                if isinstance(video_id, str) and not is_fallback_metadata(service, video_id, video):
+                    saved[service][video_id] = video
+        for _, detail in detail_rows:
+            apply_video_metadata(detail, saved)
     collect_started_at = time.perf_counter()
     video_ids = collect_video_ids(detail_rows)
     emit(
@@ -78,6 +92,12 @@ def refresh_stored_video_metadata(
         f"失敗 {summary['failure']}件 / "
         f"フォールバック {summary['fallback']}件",
     )
+    for service, ids in video_ids.items():
+        service_summary = summarize_video_metadata({service: ids}, {service: metadata[service]})
+        emit(progress, f"{service}取得結果: {service_summary}")
+        if ids and service_summary["success"] == 0:
+            print(f"{service}: 有効なメタデータを取得できなかったためDBを変更しません。", file=sys.stderr)
+            return 1
     write_started_at = time.perf_counter()
     updated_entries = write_video_metadata(db_path, detail_rows, metadata)
     emit(
@@ -110,18 +130,13 @@ def summarize_video_metadata(
 
 
 def is_fallback_metadata(service: str, video_id: str, item: dict[str, str]) -> bool:
-    if service == "niconico":
-        return (
-            item.get("title") == "ニコニコ動画"
-            or item.get("thumbnail_url") == fallback_niconico_thumbnail_url(video_id)
-        )
-    if service == "youtube":
-        quoted_id = urllib.parse.quote(video_id)
-        return (
-            item.get("title") == "YouTube"
-            or item.get("thumbnail_url") == f"https://img.youtube.com/vi/{quoted_id}/mqdefault.jpg"
-        )
-    return False
+    title = item.get("title", "")
+    placeholder = "ニコニコ動画" if service == "niconico" else "YouTube"
+    return not title or title in (placeholder, f"{placeholder} {video_id}") or not item.get("thumbnail_url")
+
+
+def video_ids_fingerprint(ids: Iterable[str]) -> str:
+    return hashlib.sha256(json.dumps(sorted(set(ids)), separators=(",", ":")).encode()).hexdigest()
 
 
 def collect_video_ids(detail_rows: list[tuple[str, dict[str, object]]]) -> dict[str, list[str]]:
@@ -225,6 +240,13 @@ def write_video_metadata(
     with closing(sqlite3.connect(db_path)) as connection:
         connection.execute("PRAGMA foreign_keys = ON")
         ensure_database(connection)
+        retained = {service: set() for service in metadata}
+        for _, detail in detail_rows:
+            for service, video in iter_detail_videos(detail):
+                video_id = video.get("id")
+                fresh = metadata[service].get(video_id, {})
+                if isinstance(video_id, str) and not is_fallback_metadata(service, video_id, video) and is_fallback_metadata(service, video_id, fresh):
+                    retained[service].add(video_id)
         for url, detail in detail_rows:
             updated_entries += apply_video_metadata(detail, metadata)
             connection.execute(
@@ -238,6 +260,14 @@ def write_video_metadata(
                     fetched_at,
                     url,
                 ),
+            )
+        video_ids = collect_video_ids(detail_rows)
+        for service, ids in video_ids.items():
+            summary = summarize_video_metadata({service: ids}, {service: metadata[service]})
+            values = {"retained": len(retained[service]), "fetched_at": fetched_at, "ids_sha256": video_ids_fingerprint(ids), **summary}
+            connection.executemany(
+                "INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)",
+                [(f"video_metadata_{service}_{key}", str(value)) for key, value in values.items()],
             )
         connection.commit()
     return updated_entries
@@ -254,6 +284,8 @@ def apply_video_metadata(
             continue
         item = metadata[service].get(video_id)
         if not item:
+            continue
+        if is_fallback_metadata(service, video_id, item) and not is_fallback_metadata(service, video_id, video):
             continue
         if service == "niconico":
             thumbnail_urls = unique_strings(

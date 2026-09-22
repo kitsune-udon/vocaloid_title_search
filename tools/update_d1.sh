@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck disable=SC1091
 source "$ROOT_DIR/tools/lib.sh"
+configure_project_python "$ROOT_DIR"
 DB_PATH="${VOCALOID_DB_PATH:-$ROOT_DIR/vocaloid_titles.sqlite3}"
 SQL_OUTPUT="${VOCALOID_D1_SQL_OUTPUT:-}"
 BACKUP_DIR="${VOCALOID_D1_BACKUP_DIR:-}"
@@ -274,36 +275,45 @@ print_operation_summary \
   "SQLite source DB, Pages artifact, Worker script, Terraform resources" \
   "$UPDATE_SMOKE_TEXT"
 
-log "Validating local SQLite DB"
-run python3 -m vocaloid_title_search.cli.validate_db \
-  --db-path "$DB_PATH"
-
 if [[ "$DRY_RUN" -eq 0 ]]; then
-  BACKUP_PATH="$BACKUP_DIR/$(date +%Y%m%d-%H%M%S)"
-  mkdir -p "$BACKUP_PATH"
-  if [[ -f "$DB_PATH" ]]; then
-    cp -p "$DB_PATH" "$BACKUP_PATH/previous-vocaloid_titles.sqlite3"
-  fi
-  if [[ -f "$SQL_OUTPUT" ]]; then
-    cp -p "$SQL_OUTPUT" "$BACKUP_PATH/previous-vocaloid_titles.sql"
-    ROLLBACK_SQL="$BACKUP_PATH/previous-vocaloid_titles.sql"
-  fi
-  log "Prepared backup directory: $BACKUP_PATH"
-fi
-
-log "Exporting D1 SQL"
-run python3 "$ROOT_DIR/tools/export_d1_sql.py" \
-  --db-path "$DB_PATH" \
-  --output "$SQL_OUTPUT"
-
-if [[ "$DRY_RUN" -eq 0 ]]; then
-  cp -p "$DB_PATH" "$BACKUP_PATH/new-vocaloid_titles.sqlite3"
-  cp -p "$SQL_OUTPUT" "$BACKUP_PATH/new-vocaloid_titles.sql"
-  if grep -Eiq '(^|[[:space:];])(BEGIN|COMMIT|SAVEPOINT)([[:space:];]|$)' "$SQL_OUTPUT"; then
-    printf 'D1 SQL contains transaction statements. Refusing remote D1 load: %s\n' "$SQL_OUTPUT" >&2
+  mkdir -p "$ROOT_DIR/release/locks" "$BACKUP_DIR"
+  LOCK_KEY="$(printf '%s' "$D1_DATABASE" | sha256sum | cut -d ' ' -f 1)"
+  exec 9>"$ROOT_DIR/release/locks/$LOCK_KEY.lock"
+  if ! flock -n 9; then
+    printf 'Another update is running for this D1 database.\n' >&2
     exit 1
   fi
+  BACKUP_PATH="$(mktemp -d "$BACKUP_DIR/$(date +%Y%m%d-%H%M%S)-XXXXXX")"
+else
+  BACKUP_PATH="$BACKUP_DIR/dry-run"
 fi
+RELEASE_STATUS="failed"
+record_release_status() {
+  local result=$?
+  if [[ "$DRY_RUN" -eq 0 ]]; then
+    python3 "$ROOT_DIR/tools/release_artifacts.py" status --directory "$BACKUP_PATH" --status "$RELEASE_STATUS" || true
+  fi
+  if [[ "$result" -ne 0 && "$RELEASE_STATUS" == "import_failed" ]]; then
+    printf 'D1 import failed. Restore the verified snapshot with:\n' >&2
+    printf '  cd %q && ./node_modules/.bin/wrangler d1 execute %q --remote --file %q\n' "$WORKER_DIR" "$D1_DATABASE" "$ROLLBACK_SQL" >&2
+  fi
+  return "$result"
+}
+trap record_release_status EXIT
+log "Snapshotting and validating release inputs"
+# Dry-run shows the public quality command before the export without reading data.
+if [[ "$DRY_RUN" -eq 1 ]]; then
+  run python3 -m vocaloid_title_search.cli.validate_db --db-path "$DB_PATH" --require-video-metadata
+  run python3 "$ROOT_DIR/tools/export_d1_sql.py" --db-path "$DB_PATH" --output "$SQL_OUTPUT"
+fi
+run python3 "$ROOT_DIR/tools/release_artifacts.py" prepare \
+  --db-path "$DB_PATH" --directory "$BACKUP_PATH" --environment "$TARGET_ENV" --database "$D1_DATABASE"
+if [[ "$DRY_RUN" -eq 0 ]]; then
+  mkdir -p "$(dirname "$SQL_OUTPUT")"
+  cp -p "$BACKUP_PATH/new-vocaloid_titles.sql" "$SQL_OUTPUT"
+fi
+# Always import the unique, validated artifact, never the shared convenience copy.
+SQL_OUTPUT="$BACKUP_PATH/new-vocaloid_titles.sql"
 
 if [[ "$ASSUME_YES" -eq 0 && "$DRY_RUN" -eq 0 ]]; then
   printf 'This will replace remote %s D1 database "%s". Continue? [y/N] ' "$TARGET_ENV" "$D1_DATABASE"
@@ -317,11 +327,27 @@ if [[ "$ASSUME_YES" -eq 0 && "$DRY_RUN" -eq 0 ]]; then
   esac
 fi
 
+if [[ "$DRY_RUN" -eq 1 ]]; then
+  BACKUP_PATH="$BACKUP_DIR/dry-run"
+fi
+ROLLBACK_SQL="$BACKUP_PATH/rollback.sql"
+log "Exporting current remote D1 before replacement"
+run_in_worker_dir env NODENV_VERSION="$NODE_VERSION" ./node_modules/.bin/wrangler d1 export "$D1_DATABASE" \
+  --remote --skip-confirmation \
+  --output "$BACKUP_PATH/remote-before.sql"
+run python3 "$ROOT_DIR/tools/export_d1_sql.py" \
+  --from-sql "$BACKUP_PATH/remote-before.sql" --output "$ROLLBACK_SQL"
+
+log "Rehearsing rollback and comparing the remote baseline"
+run python3 "$ROOT_DIR/tools/release_artifacts.py" rehearse --directory "$BACKUP_PATH"
+run python3 "$ROOT_DIR/tools/release_artifacts.py" verify --directory "$BACKUP_PATH"
+RELEASE_STATUS="import_failed"
 log "Loading SQL into remote D1"
 run_in_worker_dir env NODENV_VERSION="$NODE_VERSION" ./node_modules/.bin/wrangler d1 execute "$D1_DATABASE" \
   --remote \
   --file "$SQL_OUTPUT"
 
+RELEASE_STATUS="smoke_failed"
 if [[ "$SKIP_SMOKE_CHECKS" -eq 1 ]]; then
   log "Skipping smoke checks"
 else
@@ -344,4 +370,10 @@ ROLLBACK
   fi
 fi
 
+if [[ "$SKIP_SMOKE_CHECKS" -eq 1 ]]; then
+  RELEASE_STATUS="loaded_unverified"
+else
+  RELEASE_STATUS="verified"
+fi
+log "Release manifest: $BACKUP_PATH/manifest.json"
 log "Done in $(elapsed_seconds "$STARTED_AT") seconds"

@@ -1,0 +1,12 @@
+name = "vocaloid-title-search-integration"
+main = "../src/index.ts"
+compatibility_date = "2026-06-09"
+
+[vars]
+CORS_ORIGINS = "http://127.0.0.1:4175"
+API_TIMING_LOGS = "0"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "integration"
+database_id = "local-integration"

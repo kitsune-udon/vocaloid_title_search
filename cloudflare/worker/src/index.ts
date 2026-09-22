@@ -192,27 +192,35 @@ async function statistics(env: Env, request: Request): Promise<Response> {
 }
 
 async function search(url: URL, env: Env, request: Request): Promise<Response> {
-  await requireDatabaseReady(env.DB);
   const params = parseSearchParams(url.searchParams);
   if ("error" in params) return jsonResponse({ detail: params.error }, 400, env, request);
-  const validLabels = new Set(await loadPopularityLabels(env.DB));
-  if (params.popularityLabels.some((label) => !validLabels.has(label))) {
-    return jsonResponse({ detail: "invalid popularity_label" }, 400, env, request);
+  await requireDatabaseReady(env.DB);
+  if (params.popularityLabels.length) {
+    const validLabels = new Set(await loadPopularityLabels(env.DB));
+    if (params.popularityLabels.some((label) => !validLabels.has(label))) {
+      return jsonResponse({ detail: "invalid popularity_label" }, 400, env, request);
+    }
   }
 
   const filters = buildSearchFilters(params);
-  const countRow = await env.DB.prepare(`
+  const countStatement = env.DB.prepare(`
     SELECT COUNT(*) AS count
     FROM songs
     JOIN song_details ON song_details.url = songs.song_url
     ${filters.whereSql}
-  `).bind(...filters.values).first<CountRow>();
-  const total = countRow?.count ?? 0;
-  const rows = await env.DB.prepare(`
+  `).bind(...filters.values);
+  const rowsStatement = env.DB.prepare(`
     SELECT
       songs.title,
       songs.title_length,
-      COALESCE(composers.composer_names, '') AS artist,
+      COALESCE((
+        SELECT GROUP_CONCAT(name, ' / ')
+        FROM (
+          SELECT name FROM song_credit_people
+          WHERE song_url = songs.song_url AND role = 'composer'
+          ORDER BY name
+        )
+      ), '') AS artist,
       songs.artist_note,
       songs.song_url AS url,
       songs.popularity_score,
@@ -220,33 +228,25 @@ async function search(url: URL, env: Env, request: Request): Promise<Response> {
       song_details.published_year
     FROM songs
     JOIN song_details ON song_details.url = songs.song_url
-    LEFT JOIN (
-      SELECT song_url, GROUP_CONCAT(name, ' / ') AS composer_names
-      FROM (
-        SELECT song_url, name
-        FROM song_credit_people
-        WHERE role = 'composer'
-        ORDER BY name
-      )
-      GROUP BY song_url
-    ) composers ON composers.song_url = songs.song_url
     ${filters.whereSql}
     ORDER BY ${sqlOrderBy(params.sort)}
     LIMIT ? OFFSET ?
-  `).bind(...filters.values, params.pageSize, (params.page - 1) * params.pageSize).all<SearchRow>();
+  `).bind(...filters.values, params.pageSize, (params.page - 1) * params.pageSize);
+  const [countResult, rows] = await env.DB.batch([countStatement, rowsStatement]);
+  const total = firstCount(countResult as D1Result<CountRow>);
 
   return jsonResponse<SearchResponse>({
     total,
     page: params.page,
     page_size: params.pageSize,
-    results: rows.results ?? [],
+    results: (rows as D1Result<SearchRow>).results ?? [],
   }, 200, env, request);
 }
 
 async function songDetail(url: URL, env: Env, request: Request): Promise<Response> {
-  await requireDatabaseReady(env.DB);
   const sourceUrl = url.searchParams.get("url") ?? "";
   if (!isAllowedWikiUrl(sourceUrl)) return jsonResponse({ detail: "invalid wiki url" }, 400, env, request);
+  await requireDatabaseReady(env.DB);
   const row = await env.DB.prepare("SELECT payload_json FROM song_details WHERE url = ?").bind(sourceUrl).first<PayloadRow>();
   if (!row) return jsonResponse({ detail: "song detail is not available" }, 404, env, request);
   const body = row.payload_json satisfies string;
@@ -262,9 +262,14 @@ async function databaseIsReady(db: D1Database): Promise<boolean> {
 
 async function databaseReadiness(db: D1Database): Promise<{ ready: boolean; metadata: Record<string, string> }> {
   try {
-    const metadata = await loadMetadata(db);
-    const songCount = await db.prepare("SELECT COUNT(*) AS count FROM songs").first<CountRow>();
-    const detailCount = await db.prepare("SELECT COUNT(*) AS count FROM song_details").first<CountRow>();
+    const [metadataRows, songRows, detailRows] = await db.batch([
+      db.prepare("SELECT key, value FROM metadata"),
+      db.prepare("SELECT COUNT(*) AS count FROM songs"),
+      db.prepare("SELECT COUNT(*) AS count FROM song_details"),
+    ]);
+    const metadata = Object.fromEntries(((metadataRows as D1Result<MetadataRow>).results ?? []).map(row => [row.key, row.value]));
+    const songCount = (songRows as D1Result<CountRow>).results?.[0];
+    const detailCount = (detailRows as D1Result<CountRow>).results?.[0];
     return {
       ready: REQUIRED_METADATA_KEYS.every((key) => key in metadata)
       && metadata.schema_version === DATABASE_SCHEMA_VERSION
@@ -288,11 +293,6 @@ async function requireDatabaseReady(db: D1Database): Promise<Record<string, stri
   return readiness.metadata;
 }
 
-async function loadMetadata(db: D1Database): Promise<Record<string, string>> {
-  const rows = await db.prepare("SELECT key, value FROM metadata").all<MetadataRow>();
-  return Object.fromEntries((rows.results ?? []).map((row) => [row.key, row.value]));
-}
-
 interface SearchParams {
   length: number | null;
   sort: string;
@@ -313,12 +313,13 @@ function parseSearchParams(params: URLSearchParams): SearchParams | { error: str
   const pageSize = requiredInteger(params.get("page_size") ?? "50", "page_size", 1);
   if ("error" in pageSize) return pageSize;
   if (!PAGE_SIZES.has(pageSize.value)) return { error: "page_size must be one of 50, 100, 200" };
+  if (!Number.isSafeInteger((page.value - 1) * pageSize.value)) return { error: "page offset is too large" };
   const sort = params.get("sort") ?? "popularity";
   if (!isSortOrder(sort)) return { error: "sort is not supported" };
   return {
     length: length.value,
     sort,
-    popularityLabels: params.getAll("popularity_label").filter(Boolean),
+    popularityLabels: [...new Set(params.getAll("popularity_label").filter(Boolean))],
     composer: params.get("composer")?.trim() ?? "",
     year: year.value,
     page: page.value,
@@ -338,6 +339,7 @@ function optionalInteger(value: string | null, name: string, min: number): { val
 function requiredInteger(value: string, name: string, min: number): { value: number } | { error: string } {
   if (!/^\d+$/.test(value)) return { error: `${name} must be an integer` };
   const parsed = Number.parseInt(value, 10);
+  if (!Number.isSafeInteger(parsed)) return { error: `${name} must be a safe integer` };
   if (parsed < min) return { error: `${name} must be ${min} or greater` };
   return { value: parsed };
 }

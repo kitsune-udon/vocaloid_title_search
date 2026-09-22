@@ -2,9 +2,9 @@
 
 Web UI の詳細アコーディオンは `/api/song-detail?url=...` から取得します。公開運用時の Worker API は外部 Wiki を取得せず、D1 の `song_details.payload_json` に保存済みの構造化 JSON を返します。
 
-曲ページ HTML の取得と BeautifulSoup 解析は、DB構築ジョブの `python -m vocaloid_title_search.cli.build_db` で曲一覧取得後に全曲分実行します。DB構築ジョブは同一ホストへのリクエスト間隔、最大並列数、HTTP 429/502/503/504 のバックオフをCLIオプションで制御します。
+曲ページ HTML の取得と BeautifulSoup 解析は、DB構築ジョブの `python -m vocaloid_title_search.cli.build_db` で曲一覧取得後に実行します。既定は全曲取得で、再開・期限付き再利用は [usage.md](usage.md#resume-database-builds) を参照してください。DB構築ジョブは同一ホストへのリクエスト間隔、最大並列数、HTTP 429/502/503/504 のバックオフをCLIオプションで制御します。
 
-構築時間短縮のため、YouTube oEmbed とニコニコ getthumbinfo はDB構築中には呼びません。動画メタデータが必要な場合は、DB構築後に `python -m vocaloid_title_search.cli.refresh_video_metadata` を実行します。この処理はDB内の `videos` / `related_videos` からユニークな動画IDを集め、曲詳細ページを再取得せずに動画タイトルとサムネイルURLだけを書き戻します。
+標準の `build_db` はWiki取得だけを行います。公開用の `build_db --with-video-metadata` は、一時DB内でYouTube oEmbedとニコニコ getthumbinfoによる補完まで完了してから差し替えます。動画メタデータだけを更新する場合は `python -m vocaloid_title_search.cli.refresh_video_metadata` を実行します。この処理はDB内の `videos` / `related_videos` からユニークな動画IDを集め、曲詳細ページを再取得せずに動画タイトルとサムネイルURLだけを書き戻します。
 
 実装は `vocaloid_title_search/detail.py` に集約しています。曲ページ HTML を BeautifulSoup で解析し、作詞・作曲・編曲・唄・動画などの情報を構造化します。
 
@@ -142,7 +142,7 @@ Web UIの詳細表示がおかしい場合は、表示、API、保存済みJSON�
 
 詳細情報は以下の順で抽出します。
 
-1. DB構築CLIが DB 内の曲 URL を列挙し、全曲のページを `fetch_song_detail()` で取得します。
+1. DB構築CLIが DB 内の曲 URL を列挙し、未保存・再利用対象外の曲ページを `fetch_song_detail()` で取得します。
 2. `fetch_song_detail(url)` が曲ページ HTML を取得します。
 3. `parse_song_detail(page_html, source_url)` が HTML 文字列を受け取り、各抽出関数に分配します。
 4. `clean_soup(page_html)` が `script`, `style`, `noscript`, `iframe` を除去した BeautifulSoup オブジェクトを作ります。

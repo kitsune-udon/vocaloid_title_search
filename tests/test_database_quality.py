@@ -57,6 +57,24 @@ class DatabaseQualityTests(unittest.TestCase):
             self.assertEqual(report.counts["videos_with_title"], 1)
             self.assertEqual(report.counts["videos_with_thumbnail"], 1)
 
+    def test_valid_json_that_is_not_an_object_fails_cleanly(self) -> None:
+        for payload in ("null", "[]", "42", '\"text\"'):
+            with self.subTest(payload=payload), temporary_db([raw_song()]) as db_path:
+                with closing(sqlite3.connect(db_path)) as connection:
+                    connection.execute("UPDATE song_details SET payload_json = ?", (payload,))
+                    connection.commit()
+                report = validate_database_quality(db_path)
+                self.assertFalse(report.ok)
+                self.assertEqual(report.counts["invalid_detail_json"], 1)
+
+    def test_publication_requires_metadata_refresh_for_present_services(self) -> None:
+        with temporary_db([raw_song()]) as db_path:
+            save_song_detail_entry(db_path, MELT_URL, {"videos": {"youtube": [{"id": "video"}]}})
+            self.assertTrue(validate_database_quality(db_path).ok)
+            report = validate_database_quality(db_path, require_video_metadata=True)
+            self.assertFalse(report.ok)
+            self.assertTrue(any("youtube metadata refresh" in error for error in report.errors))
+
     def test_database_with_missing_detail_fails_quality_check(self) -> None:
         with temporary_db() as db_path:
             rebuild_database(db_path, [raw_song()], {}, "source")

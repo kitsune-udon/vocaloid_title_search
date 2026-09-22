@@ -1,0 +1,38 @@
+name: API performance
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 21 * * 0'
+permissions:
+  contents: read
+concurrency:
+  group: api-profile
+  cancel-in-progress: false
+jobs:
+  profile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - name: Measure configured public API
+        env:
+          PROFILE_BASE_URL: ${{ secrets.PROFILE_BASE_URL }}
+          PROFILE_MAX_P95_MS: ${{ vars.PROFILE_MAX_P95_MS }}
+        run: |
+          if [ -z "$PROFILE_BASE_URL" ]; then
+            echo 'PROFILE_BASE_URL is not configured; measurement skipped.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          python tools/profile_worker_api.py --base-url "$PROFILE_BASE_URL" \
+            --repeat 20 --interval 0.2 --redact-base-url \
+            --max-p95-ms "${PROFILE_MAX_P95_MS:-0}" --output release/performance/profile.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: api-performance-${{ github.run_id }}
+          path: release/performance/profile.json
+          if-no-files-found: ignore
+          retention-days: 30

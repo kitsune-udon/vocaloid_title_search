@@ -8,7 +8,8 @@
     "dev": "./node_modules/.bin/vite --host 127.0.0.1",
     "build": "./node_modules/.bin/vue-tsc --noEmit && ./node_modules/.bin/vite build",
     "preview": "./node_modules/.bin/vite preview --host 127.0.0.1",
-    "test:e2e": "./node_modules/.bin/playwright test"
+    "test:e2e": "./node_modules/.bin/playwright test",
+    "test:integration": "./node_modules/.bin/playwright test --config playwright.integration.config.ts"
   },
   "dependencies": {
     "@lucide/vue": "^1.17.0",

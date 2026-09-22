@@ -67,6 +67,8 @@ uv run --cache-dir .uv-cache python -m vocaloid_title_search.cli.build_db
 uv run --cache-dir .uv-cache python -m vocaloid_title_search.cli.refresh_video_metadata
 ```
 
+公開用DBを補完まで一括作成する場合は `build_db --with-video-metadata` を使います。手順は [operations.md](operations.md#database-update) を参照してください。
+
 DB構築CLIは一時DBを構築してから原子的に差し替えます。曲詳細はDB構築中に全曲分取得し、詳細が揃っていないDBはAPIから未完成として扱われます。
 
 Web API / Web UI の作曲者フィルターは、曲詳細の `credits.composer` を対象にします。Web UI では文字数と作曲者を独立した条件として扱い、文字数を空欄にすると作曲者だけで検索できます。
@@ -272,3 +274,17 @@ Web UI は検索ビューと統計ビューを持ちます。検索ビューは�
 ```bash
 tools/check_all.sh
 ```
+
+## Resume Database Builds
+
+長時間の公開用DB構築では、同じコマンドで再開できるようにします。
+
+```bash
+uv run --cache-dir .uv-cache python -m vocaloid_title_search.cli.build_db --with-video-metadata --resume
+```
+
+失敗時は既存DBを保持し、隣の `.vocaloid_titles.sqlite3.build.checkpoint.sqlite3` に保存済み詳細を残します。同じコマンドを再実行すると曲一覧はチェックポイントのものを使い、未保存の詳細から再開します。動画メタデータ取得は再実行します。成功時はチェックポイントが完成DBになります。曲一覧取得前の失敗は再開対象を作りません。
+
+抽出コード・保存先・取得元・動画補完オプションが変わったチェックポイントは拒否します。新しい条件で開始する場合は、原因を確認してチェックポイントを別の場所へ退避します。ロックファイルは残っていても正常で、プロセス終了時にロックは解放されます。実行中に削除しないでください。
+
+前回DBの新しい詳細を再利用する場合は `--reuse-details-days 7` を追加します。抽出コードのfingerprint、詳細schema、Wiki取得日時が条件を満たす曲だけを再利用します。動画補完で更新される日時をWikiの鮮度として扱いません。従来DBなどfingerprintがない場合は再取得します。これは期限に基づく再利用であり、期限内のWiki変更を検出する仕組みではありません。全件再取得したい場合は新しい構築でこのオプションを省略します。

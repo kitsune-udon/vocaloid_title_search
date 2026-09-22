@@ -25,6 +25,7 @@ release/
 
 cloudflare/worker/wrangler.toml
 vocaloid_titles.sqlite3
+.vocaloid_titles.sqlite3.build.*
 
 # Terraform local state and secrets
 **/.terraform/
@@ -34,3 +35,5 @@ vocaloid_titles.sqlite3
 !*.tfvars.example
 crash.log
 crash.*.log
+
+.*.sqlite3.build.*

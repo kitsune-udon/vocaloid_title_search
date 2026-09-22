@@ -284,9 +284,9 @@ artist_note: 2016～
 
 ## Update Strategy
 
-DB構築CLIは既存DBを直接 `DROP TABLE` せず、同じディレクトリに一時DBを構築します。曲一覧と曲詳細の全件取得が成功した後に `os.replace()` で差し替えるため、公開APIは更新中でも古い完全なDBか新しい完全なDBのどちらかを読みます。
+DB構築CLIは既存DBを直接 `DROP TABLE` せず、同じディレクトリに一時DBを構築します。曲一覧と必要な曲詳細の取得・再利用・品質検査が成功した後に `os.replace()` で差し替えるため、公開APIは更新中でも古い完全なDBか新しい完全なDBのどちらかを読みます。
 
-曲詳細はDB構築時に全曲分取得します。詳細が揃っていないDBは `database_is_ready()` で未完成として扱います。
+曲詳細はDB構築時に全曲分を揃えます。再利用時は `source_fetched_at` と抽出コードfingerprintで鮮度を確認します。詳細が揃っていないDBは `database_is_ready()` で未完成として扱います。
 
 ## Runtime Read-Only Access
 

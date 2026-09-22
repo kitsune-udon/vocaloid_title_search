@@ -127,6 +127,23 @@ describe("Worker API", () => {
     assert.equal((await invalidPage.json()).detail, "page must be 1 or greater");
   });
 
+  it("rejects oversized numeric input before touching D1", async () => {
+    for (const path of ["/api/search?page=9007199254740992", "/api/search?length=" + "9".repeat(400),
+                        "/api/search?page=9007199254740991", "/api/song-detail?url=invalid"]) {
+      const testEnv = env();
+      const response = await request(path, testEnv);
+      assert.equal(response.status, 400);
+      assert.equal(testEnv.DB.queries.length, 0);
+    }
+  });
+
+  it("does not load all labels for an unfiltered search", async () => {
+    const testEnv = env();
+    const data = await jsonRequest("/api/search", testEnv);
+    assert.equal(data.total, 3);
+    assert.equal(testEnv.DB.queries.some(query => query.startsWith("SELECT popularity_label FROM songs")), false);
+  });
+
   it("returns stored song detail and validates wiki URLs", async () => {
     const detail = await jsonRequest("/api/song-detail?url=https%3A%2F%2Fw.atwiki.jp%2Fhmiku%2Fpages%2F82.html");
     const invalid = await request("/api/song-detail?url=https%3A%2F%2Fexample.com%2F82.html", env());

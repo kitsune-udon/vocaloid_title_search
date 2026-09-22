@@ -1,6 +1,6 @@
 # Detail Extraction Algorithm
 
-この文書は、`vocaloid_title_search/detail.py` の詳細抽出ヒューリスティックを説明します。APIレスポンスの形や運用上の前提は [detail-extraction.md](detail-extraction.md) を参照してください。
+この文書は、`vocaloid_title_search/detail.py` と `detail_videos.py` の詳細抽出ヒューリスティックを説明します。APIレスポンスの形や運用上の前提は [detail-extraction.md](detail-extraction.md) を参照してください。
 
 ## Reader Shortcuts
 

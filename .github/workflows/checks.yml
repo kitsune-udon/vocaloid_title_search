@@ -1,0 +1,47 @@
+name: Checks
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: "true"
+      WRANGLER_SEND_METRICS: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - name: Install locked dependencies
+        run: |
+          python -m pip install uv==0.7.13
+          uv sync --locked
+          corepack enable
+          (cd frontend && yarn install --frozen-lockfile)
+          (cd cloudflare/worker && yarn install --frozen-lockfile)
+          (cd docs-site && yarn install --frozen-lockfile)
+          (cd frontend && ./node_modules/.bin/playwright install --with-deps chromium)
+      - run: tools/check_all.sh
+      - run: yarn build
+        working-directory: docs-site
+      - run: yarn test:e2e
+        working-directory: frontend
+      - run: yarn test:integration
+        working-directory: frontend
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: browser-failure-traces
+          path: frontend/test-results/
+          retention-days: 7

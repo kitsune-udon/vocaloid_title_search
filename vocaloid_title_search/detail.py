@@ -2,11 +2,35 @@
 
 import re
 import urllib.parse
-from html import unescape
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
 
 from bs4 import BeautifulSoup
+
+from vocaloid_title_search.detail_text import (
+    clean_soup,
+    clean_text,
+    find_last_heading,
+    heading_level,
+    is_heading_node,
+    remove_noise_nodes,
+    unique,
+)
+from vocaloid_title_search.detail_videos import (
+    extract_videos,
+    fallback_niconico_thumbnail_url,
+    fallback_niconico_thumbnail_urls,
+    fallback_youtube_thumbnail_urls,
+    find_headings,
+    merge_video_maps,
+    niconico_video_entry,
+    remove_excluded_video_sections,
+    remove_heading_section,
+    split_video_sections,
+    unique_video_entries,
+    video_entries,
+    video_source_urls,
+    youtube_video_entry,
+)
 
 from vocaloid_title_search.http import fetch_text as http_fetch_text
 
@@ -41,7 +65,6 @@ CREDIT_LABELS = {
 }
 SECTION_END_MARKERS = {"歌詞", "関連動画", "コメント"}
 SUBSECTION_MARKER_LINE = "+"
-EXCLUDED_VIDEO_SECTION_HEADINGS = {"英語版"}
 DISCARDED_CREDIT_VALUES = {
     "+",
     "＋",
@@ -88,15 +111,6 @@ COMPACT_LINK_NOTE_TOKENS = (
     "skeb",
     "x",
 )
-NICONICO_ID_PATTERN = re.compile(
-    r"(?:nicovideo\.jp/watch/|ext\.nicovideo\.jp/thumb/)((?:sm|nm|so)\d+)"
-)
-YOUTUBE_ID_PATTERN = re.compile(
-    r"(?:youtube\.com/(?:watch\?v=|embed/)|youtu\.be/)([A-Za-z0-9_-]{11})"
-)
-IFRAME_SRC_PATTERN = re.compile(r"<iframe\b[^>]*\bsrc=[\"']([^\"']+)[\"']", re.I)
-LINK_HREF_PATTERN = re.compile(r"<a\b[^>]*\bhref=[\"']([^\"']+)[\"']", re.I)
-VideoMap = dict[str, list[dict[str, str]]]
 
 
 @dataclass(frozen=True)
@@ -162,20 +176,6 @@ def is_allowed_wiki_url(url: str) -> bool:
 
 def fetch_text(url: str, timeout: float = 10.0) -> str:
     return http_fetch_text(url, timeout=timeout, user_agent=USER_AGENT)
-
-
-def clean_soup(page_html: str, *, remove_media: bool = True) -> BeautifulSoup:
-    soup = BeautifulSoup(page_html, "lxml")
-    remove_noise_nodes(soup, remove_media=remove_media)
-    return soup
-
-
-def remove_noise_nodes(soup: BeautifulSoup, *, remove_media: bool = True) -> None:
-    tags = ["script", "style", "noscript"]
-    if remove_media:
-        tags.append("iframe")
-    for node in soup(tags):
-        node.decompose()
 
 
 def extract_page_title(soup: BeautifulSoup) -> str:
@@ -609,15 +609,6 @@ def extract_introduction(soup: BeautifulSoup) -> list[str]:
     return merge_intro_fragments(raw_lines)[:8]
 
 
-def find_last_heading(soup: BeautifulSoup, text: str):
-    headings = [
-        node
-        for node in soup.find_all(re.compile(r"^h[1-6]$"))
-        if clean_text(node.get_text(" ")) == text
-    ]
-    return headings[-1] if headings else None
-
-
 def extract_section_items(heading) -> list[str]:
     items: list[str] = []
     for node in heading.find_next_siblings():
@@ -632,16 +623,6 @@ def extract_section_items(heading) -> list[str]:
         if getattr(node, "name", None) in {"blockquote", "div", "p"}:
             add_intro_text(items, node.get_text(" "))
     return items
-
-
-def is_heading_node(node) -> bool:
-    return bool(getattr(node, "name", None) and re.fullmatch(r"h[1-6]", node.name))
-
-
-def heading_level(node) -> int | None:
-    if not is_heading_node(node):
-        return None
-    return int(node.name[1])
 
 
 def add_intro_text(items: list[str], value: str) -> None:
@@ -729,189 +710,3 @@ def is_intro_sentence(value: str) -> bool:
     if not 6 <= len(value) <= 220:
         return False
     return not re.search(r"DLは。$", value)
-
-
-def extract_videos(
-    page_html: str,
-    *,
-    include_iframes: bool = True,
-    include_links: bool = True,
-) -> VideoMap:
-    video_urls = video_source_urls(
-        page_html,
-        include_iframes=include_iframes,
-        include_links=include_links,
-    )
-    niconico_ids = unique(
-        video_id
-        for url in video_urls
-        for video_id in NICONICO_ID_PATTERN.findall(url)
-    )
-    youtube_ids = unique(
-        video_id
-        for url in video_urls
-        for video_id in YOUTUBE_ID_PATTERN.findall(url)
-    )
-    return {
-        "niconico": video_entries(
-            niconico_ids,
-            niconico_video_entry,
-        ),
-        "youtube": video_entries(
-            youtube_ids,
-            youtube_video_entry,
-        ),
-    }
-
-
-def video_entries(
-    video_ids: list[str],
-    entry_factory,
-) -> list[dict[str, str]]:
-    if len(video_ids) <= 1:
-        return [entry_factory(video_id) for video_id in video_ids]
-    with ThreadPoolExecutor(max_workers=min(6, len(video_ids))) as executor:
-        return list(executor.map(entry_factory, video_ids))
-
-
-def video_source_urls(
-    page_html: str,
-    *,
-    include_iframes: bool,
-    include_links: bool,
-) -> list[str]:
-    urls: list[str] = []
-    if include_iframes:
-        urls.extend(unescape(url) for url in IFRAME_SRC_PATTERN.findall(page_html))
-    if include_links:
-        urls.extend(unescape(url) for url in LINK_HREF_PATTERN.findall(page_html))
-    return urls
-
-
-def merge_video_maps(*video_maps: VideoMap) -> VideoMap:
-    return {
-        "niconico": unique_video_entries(
-            [video for video_map in video_maps for video in video_map["niconico"]]
-        ),
-        "youtube": unique_video_entries(
-            [video for video_map in video_maps for video in video_map["youtube"]]
-        ),
-    }
-
-
-def unique_video_entries(videos: list[dict[str, str]]) -> list[dict[str, str]]:
-    result: list[dict[str, str]] = []
-    seen: set[str] = set()
-    for video in videos:
-        video_id = video.get("id", "")
-        if video_id and video_id not in seen:
-            seen.add(video_id)
-            result.append(video)
-    return result
-
-
-def split_video_sections(page_html: str) -> tuple[str, str]:
-    soup = clean_soup(page_html, remove_media=False)
-    related_heading = find_last_heading(soup, "関連動画")
-    if not related_heading:
-        return page_html, ""
-
-    related_level = heading_level(related_heading) or 6
-    related_nodes = []
-    for node in list(related_heading.find_next_siblings()):
-        node_level = heading_level(node)
-        if node_level is not None and node_level <= related_level:
-            break
-        related_nodes.append(str(node))
-        node.decompose()
-    related_heading.decompose()
-    return str(soup), "".join(related_nodes)
-
-
-def remove_excluded_video_sections(page_html: str) -> str:
-    if not any(heading in page_html for heading in EXCLUDED_VIDEO_SECTION_HEADINGS):
-        return page_html
-    soup = clean_soup(page_html, remove_media=False)
-    for heading in find_headings(soup, EXCLUDED_VIDEO_SECTION_HEADINGS):
-        remove_heading_section(heading)
-    return str(soup)
-
-
-def find_headings(soup: BeautifulSoup, texts: set[str]) -> list:
-    return [
-        node
-        for node in soup.find_all(re.compile(r"^h[1-6]$"))
-        if clean_text(node.get_text(" ")) in texts
-    ]
-
-
-def remove_heading_section(heading) -> None:
-    section_level = heading_level(heading) or 6
-    for node in list(heading.find_next_siblings()):
-        node_level = heading_level(node)
-        if node_level is not None and node_level <= section_level:
-            break
-        node.decompose()
-    heading.decompose()
-
-
-def niconico_video_entry(
-    video_id: str,
-) -> dict[str, str]:
-    thumbnail_urls = fallback_niconico_thumbnail_urls(video_id)
-    return {
-        "id": video_id,
-        "url": f"https://www.nicovideo.jp/watch/{video_id}",
-        "title": f"ニコニコ動画 {video_id}",
-        "thumbnail_url": thumbnail_urls[0],
-        "thumbnail_urls": thumbnail_urls,
-    }
-
-
-def youtube_video_entry(video_id: str) -> dict[str, str]:
-    quoted_id = urllib.parse.quote(video_id)
-    thumbnail_urls = fallback_youtube_thumbnail_urls(video_id)
-    return {
-        "id": video_id,
-        "url": f"https://www.youtube.com/watch?v={quoted_id}",
-        "title": f"YouTube {video_id}",
-        "thumbnail_url": thumbnail_urls[0],
-        "thumbnail_urls": thumbnail_urls,
-    }
-
-
-def fallback_niconico_thumbnail_url(video_id: str) -> str:
-    return fallback_niconico_thumbnail_urls(video_id)[0]
-
-
-def fallback_niconico_thumbnail_urls(video_id: str) -> list[str]:
-    numeric_id = re.sub(r"^[a-z]+", "", video_id, flags=re.I)
-    base_url = f"https://nicovideo.cdn.nimg.jp/thumbnails/{numeric_id}/{numeric_id}"
-    return [
-        f"{base_url}.L",
-        f"{base_url}.M",
-        base_url,
-    ]
-
-
-def fallback_youtube_thumbnail_urls(video_id: str) -> list[str]:
-    quoted_id = urllib.parse.quote(video_id)
-    base_url = f"https://img.youtube.com/vi/{quoted_id}"
-    return [
-        f"{base_url}/maxresdefault.jpg",
-        f"{base_url}/hqdefault.jpg",
-        f"{base_url}/mqdefault.jpg",
-        f"{base_url}/default.jpg",
-    ]
-
-
-def clean_text(value: str) -> str:
-    return re.sub(r"\s+", " ", value).strip()
-
-
-def unique(values: list[str]) -> list[str]:
-    result: list[str] = []
-    for value in values:
-        if value and value not in result:
-            result.append(value)
-    return result
