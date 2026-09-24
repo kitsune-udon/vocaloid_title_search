@@ -14,6 +14,9 @@ import urllib.parse
 import urllib.request
 
 
+MAX_REDIRECTS = 10
+REDIRECT_STATUS_CODES = {301, 302, 303, 307, 308}
+
 RETRY_STATUS_CODES = {429, 502, 503, 504}
 
 
@@ -75,54 +78,51 @@ class HttpFetcher:
                 if not should_retry(exc, attempt, self.policy.max_retries):
                     raise
                 time.sleep(retry_delay(exc, attempt + 1, self.policy))
+            except (urllib.error.URLError, http.client.HTTPException, OSError) as exc:
+                if attempt >= self.policy.max_retries:
+                    if isinstance(exc, http.client.HTTPException):
+                        raise urllib.error.URLError(exc) from exc
+                    raise
+                time.sleep(min(self.policy.backoff_base * (2 ** attempt), self.policy.backoff_max))
         raise RuntimeError("unreachable retry state")
 
     def fetch_text_persistent(self, url: str, *, timeout: float, user_agent: str) -> str:
-        parsed = urllib.parse.urlsplit(url)
-        if parsed.scheme != "https":
-            with urllib.request.urlopen(
-                urllib.request.Request(url, headers={"User-Agent": user_agent}),
-                timeout=timeout,
-            ) as response:
-                charset = response.headers.get_content_charset() or "utf-8"
-                return response.read().decode(charset, errors="replace")
+        current = url
+        for redirect in range(MAX_REDIRECTS + 1):
+            parsed = urllib.parse.urlsplit(current)
+            if parsed.scheme not in {"https", "http"}:
+                raise ValueError("unsupported HTTP redirect scheme")
+            if parsed.scheme == "http":
+                with urllib.request.urlopen(
+                    urllib.request.Request(current, headers={"User-Agent": user_agent}), timeout=timeout,
+                ) as response:
+                    charset = response.headers.get_content_charset() or "utf-8"
+                    return response.read().decode(charset, errors="replace")
 
-        path = urllib.parse.urlunsplit(("", "", parsed.path or "/", parsed.query, ""))
-        connection = self.connection_for(parsed.netloc, timeout)
-        try:
-            connection.request(
-                "GET",
-                path,
-                headers={
-                    "Host": parsed.netloc,
-                    "User-Agent": user_agent,
-                    "Connection": "keep-alive",
-                },
-            )
-            response = connection.getresponse()
-            data = response.read()
-            if response.status in {301, 302, 303, 307, 308}:
-                location = response.headers.get("Location")
+            path = urllib.parse.urlunsplit(("", "", parsed.path or "/", parsed.query, ""))
+            connection = self.connection_for(parsed.netloc, timeout)
+            try:
+                connection.request("GET", path, headers={
+                    "Host": parsed.netloc, "User-Agent": user_agent, "Connection": "keep-alive",
+                })
+                response = connection.getresponse()
+                data = response.read()
+                if response.status in REDIRECT_STATUS_CODES:
+                    location = response.headers.get("Location")
+                    self.close_connection(parsed.netloc)
+                    if not location or redirect == MAX_REDIRECTS:
+                        raise urllib.error.HTTPError(current, response.status, "invalid or excessive redirects", response.headers, None)
+                    current = urllib.parse.urljoin(current, location)
+                    self._rate_limiter.wait(current)
+                    continue
+                if response.status >= 400:
+                    raise urllib.error.HTTPError(current, response.status, response.reason, response.headers, None)
+                charset = response.headers.get_content_charset() or "utf-8"
+                return data.decode(charset, errors="replace")
+            except (http.client.HTTPException, OSError):
                 self.close_connection(parsed.netloc)
-                if location:
-                    return self.fetch_text_persistent(
-                        urllib.parse.urljoin(url, location),
-                        timeout=timeout,
-                        user_agent=user_agent,
-                    )
-            if response.status >= 400:
-                raise urllib.error.HTTPError(
-                    url,
-                    response.status,
-                    response.reason,
-                    response.headers,
-                    None,
-                )
-            charset = response.headers.get_content_charset() or "utf-8"
-            return data.decode(charset, errors="replace")
-        except (http.client.HTTPException, OSError):
-            self.close_connection(parsed.netloc)
-            raise
+                raise
+        raise RuntimeError("unreachable redirect state")
 
     def connection_for(self, netloc: str, timeout: float) -> http.client.HTTPSConnection:
         connections = getattr(self._thread_local, "connections", None)
@@ -133,6 +133,10 @@ class HttpFetcher:
         if connection is None:
             connection = http.client.HTTPSConnection(netloc, timeout=timeout)
             connections[netloc] = connection
+        elif connection.timeout != timeout:
+            connection.timeout = timeout
+            if connection.sock is not None:
+                connection.sock.settimeout(timeout)
         return connection
 
     def close_connection(self, netloc: str) -> None:
@@ -193,6 +197,7 @@ atexit.register(_default_fetcher.close)
 def configure_http_fetch(policy: HttpFetchPolicy) -> None:
     global _default_fetcher
     _default_fetcher.close()
+    atexit.unregister(_default_fetcher.close)
     _default_fetcher = HttpFetcher(policy)
     atexit.register(_default_fetcher.close)
 

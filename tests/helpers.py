@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from contextlib import contextmanager
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -11,6 +12,29 @@ from vocaloid_title_search.models import PopularityInfo, RawSong
 
 SOURCE_URL = "https://example.test/source"
 MELT_URL = "https://w.atwiki.jp/hmiku/pages/82.html"
+
+
+def complete_detail(payload: dict, url: str = MELT_URL) -> dict:
+    """Complete synthetic fixtures to the public API contract."""
+    detail = {"page_title": "検証曲", "reading": "", "source_url": url, "published_year": None,
+              "credits": {}, "introduction": [], "videos": {}, "related_videos": {}}
+    detail.update(deepcopy(payload))
+    for key in ("videos", "related_videos"):
+        section = detail[key]
+        if not isinstance(section, dict):
+            continue
+        for service in ("niconico", "youtube"):
+            section.setdefault(service, [])
+        for service, videos in section.items():
+            for video in videos:
+                video.setdefault("url", f"https://example.test/{service}/{video['id']}")
+                video.setdefault("title", "")
+                video.setdefault("thumbnail_url", "")
+    return detail
+
+
+def save_complete_detail(db_path: Path, url: str, payload: dict) -> None:
+    save_song_detail_entry(db_path, url, complete_detail(payload, url))
 
 
 @contextmanager
@@ -25,7 +49,7 @@ def temporary_db(
         if songs is not None:
             rebuild_database(db_path, songs, dict(popularity or {}), source_url)
             for song in songs:
-                save_song_detail_entry(
+                save_complete_detail(
                     db_path,
                     song.url,
                     {

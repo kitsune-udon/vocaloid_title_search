@@ -42,6 +42,29 @@ class DatabaseQualityTests(unittest.TestCase):
             self.assertEqual(report.counts["videos"], 1)
             self.assertEqual(report.counts["videos_with_thumbnail"], 1)
 
+    def test_corrupt_song_search_values_are_rejected_without_count_changes(self):
+        from tools.export_d1_sql import export_atomic
+        changes = ["title_length=999", "title='wrong'", "artist='wrong'",
+                   "artist_note='wrong'", "sort_order=0", "popularity_score=-1",
+                   "popularity_label='unknown'"]
+        for change in changes:
+            with self.subTest(change=change), temporary_db([raw_song()]) as path:
+                with closing(sqlite3.connect(path)) as connection:
+                    connection.execute("UPDATE songs SET " + change)
+                    connection.commit()
+                    report = validate_database_quality(path)
+                    self.assertFalse(report.ok)
+                    self.assertEqual(report.counts["invalid_song_values"], 1)
+                    with self.assertRaisesRegex(ValueError, "invalid song values"):
+                        export_atomic(connection, path.with_suffix(".sql"), publish=True)
+
+    def test_duplicate_sort_positions_are_rejected(self):
+        with temporary_db([raw_song(), raw_song("別曲", "https://w.atwiki.jp/hmiku/pages/2.html")]) as path:
+            with closing(sqlite3.connect(path)) as connection:
+                connection.execute("UPDATE songs SET sort_order=1")
+                connection.commit()
+            self.assertFalse(validate_database_quality(path).ok)
+
     def test_service_grouped_videos_are_counted(self) -> None:
         with temporary_db([raw_song()]) as db_path:
             save_song_detail_entry(db_path, MELT_URL, {
@@ -74,6 +97,47 @@ class DatabaseQualityTests(unittest.TestCase):
             report = validate_database_quality(db_path, require_video_metadata=True)
             self.assertFalse(report.ok)
             self.assertTrue(any("youtube metadata refresh" in error for error in report.errors))
+
+    def test_publication_rejects_bad_detail_shapes_and_unsafe_links(self):
+        from tests.helpers import complete_detail
+        from tools.export_d1_sql import export_atomic
+        broken = [
+            {"credits": {"composer": "ryo"}}, {"introduction": "text"},
+            {"published_year": True}, {"page_title": 123},
+            {"source_url": "https://example.test/wrong-source"},
+            {"videos": {"youtube": ["bad entry"]}},
+            {"videos": {"youtube": [{"id": "video", "url": "javascript:alert(1)", "title": "title", "thumbnail_url": ""}]}},
+        ]
+        for fields in broken:
+            with self.subTest(fields=fields), temporary_db([raw_song()]) as path:
+                payload = complete_detail({})
+                payload.update(fields)
+                with closing(sqlite3.connect(path)) as connection:
+                    connection.execute("UPDATE song_details SET payload_json=?", (json.dumps(payload),))
+                    connection.commit()
+                    self.assertFalse(validate_database_quality(path, require_video_metadata=True).ok)
+                    with self.assertRaisesRegex(ValueError, "invalid detail contract"):
+                        export_atomic(connection, path.with_suffix(".sql"), publish=True)
+
+    def test_search_index_must_match_detail_values_not_only_row_counts(self):
+        from tests.helpers import complete_detail
+        with temporary_db([raw_song()]) as path:
+            save_song_detail_entry(path, MELT_URL, complete_detail({"credits": {"composer": ["Correct"]}, "published_year": 2020}))
+            with closing(sqlite3.connect(path)) as connection:
+                connection.execute("UPDATE song_credit_people SET name='Wrong', normalized_name='wrong'")
+                connection.execute("UPDATE song_details SET published_year=1999")
+                connection.commit()
+            report = validate_database_quality(path)
+            self.assertFalse(report.ok)
+            self.assertEqual(report.counts["detail_index_mismatch"], 1)
+
+    def test_publication_requires_complete_detail_but_local_reports_allow_partial(self):
+        with temporary_db([raw_song()]) as path:
+            save_song_detail_entry(path, MELT_URL, {"page_title": "partial"})
+            self.assertTrue(validate_database_quality(path).ok)
+            report = validate_database_quality(path, require_video_metadata=True)
+            self.assertFalse(report.ok)
+            self.assertEqual(report.counts["invalid_detail_contract"], 1)
 
     def test_database_with_missing_detail_fails_quality_check(self) -> None:
         with temporary_db() as db_path:

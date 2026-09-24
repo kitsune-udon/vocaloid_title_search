@@ -18,14 +18,23 @@ export class ApiError extends Error {
 }
 
 async function fetchJson<T>(url: string, signal?: AbortSignal): Promise<T> {
+  const controller = new AbortController();
+  const abort = () => controller.abort(signal?.reason);
+  signal?.addEventListener("abort", abort, { once: true });
+  if (signal?.aborted) abort();
+  const timer = setTimeout(() => controller.abort(new Error("request timed out")), 20_000);
   let response: Response;
+  let text: string;
   try {
-    response = await fetch(url, { signal });
+    response = await fetch(url, { signal: controller.signal });
+    text = await response.text();
   } catch (caught) {
     const message = caught instanceof Error ? caught.message : "network error";
     throw new ApiError(null, message);
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", abort);
   }
-  const text = await response.text();
   let data: (T & { error?: string; detail?: string }) | undefined;
   if (text) {
     try {
@@ -49,16 +58,16 @@ async function fetchJson<T>(url: string, signal?: AbortSignal): Promise<T> {
   return data;
 }
 
-export function fetchMetadata(): Promise<MetadataResponse> {
-  return fetchJson<MetadataResponse>("/api/metadata");
+export function fetchMetadata(signal?: AbortSignal): Promise<MetadataResponse> {
+  return fetchJson<MetadataResponse>("/api/metadata", signal);
 }
 
-export function fetchPopularityLabels(): Promise<PopularityLabelsResponse> {
-  return fetchJson<PopularityLabelsResponse>("/api/popularity-labels");
+export function fetchPopularityLabels(signal?: AbortSignal): Promise<PopularityLabelsResponse> {
+  return fetchJson<PopularityLabelsResponse>("/api/popularity-labels", signal);
 }
 
-export function fetchStatistics(): Promise<StatisticsResponse> {
-  return fetchJson<StatisticsResponse>("/api/stats");
+export function fetchStatistics(signal?: AbortSignal): Promise<StatisticsResponse> {
+  return fetchJson<StatisticsResponse>("/api/stats", signal);
 }
 
 export function searchSongs(
@@ -91,7 +100,7 @@ export function searchSongs(
   return fetchJson<SearchResponse>(`/api/search?${params.toString()}`, signal);
 }
 
-export function fetchSongDetail(url: string): Promise<SongDetail> {
+export function fetchSongDetail(url: string, signal?: AbortSignal): Promise<SongDetail> {
   const params = new URLSearchParams({ url });
-  return fetchJson<SongDetail>(`/api/song-detail?${params.toString()}`);
+  return fetchJson<SongDetail>(`/api/song-detail?${params.toString()}`, signal);
 }

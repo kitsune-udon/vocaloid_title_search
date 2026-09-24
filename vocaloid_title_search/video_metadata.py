@@ -13,10 +13,10 @@ import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import closing
 from datetime import datetime, timezone
-from functools import lru_cache
 from pathlib import Path
 from typing import Callable, Iterable, Iterator
 
+from vocaloid_title_search.build_checkpoint import build_lock
 from vocaloid_title_search.database import ensure_database, load_song_detail_payloads
 from vocaloid_title_search.detail_text import clean_text
 from vocaloid_title_search.detail_videos import (
@@ -43,6 +43,19 @@ def refresh_stored_video_metadata(
     timeout: float,
     progress: ProgressCallback | None = None,
     previous_db_path: Path | None = None,
+) -> int:
+    try:
+        with build_lock(db_path.resolve()):
+            return _refresh_locked(db_path, max_workers=max_workers, timeout=timeout,
+                                   progress=progress, previous_db_path=previous_db_path)
+    except ValueError as exc:
+        print(f"動画メタデータ更新を中止しました: {exc}", file=sys.stderr)
+        return 1
+
+
+def _refresh_locked(
+    db_path: Path, *, max_workers: int, timeout: float,
+    progress: ProgressCallback | None, previous_db_path: Path | None,
 ) -> int:
     started_at = time.perf_counter()
     try:
@@ -227,6 +240,12 @@ def fetch_service_video_metadata(
                     f"{service}メタデータ進捗: {completed}/{len(video_ids)}件 "
                     f"({completed / elapsed:.2f}件/秒, 失敗 {failures})",
                 )
+    diagnostics: dict[str, list[str]] = {}
+    for video_id, item in sorted(metadata.items()):
+        if reason := item.get("fetch_error"):
+            diagnostics.setdefault(reason, []).append(video_id)
+    if diagnostics:
+        emit(progress, f"{service}取得診断: " + json.dumps(diagnostics, ensure_ascii=False, sort_keys=True))
     return metadata
 
 
@@ -253,12 +272,13 @@ def write_video_metadata(
                 """
                 UPDATE song_details
                 SET payload_json = ?, fetched_at = ?
-                WHERE url = ?
+                WHERE url = ? AND payload_json != ?
                 """,
                 (
                     json.dumps(detail, ensure_ascii=False, separators=(",", ":")),
                     fetched_at,
                     url,
+                    json.dumps(detail, ensure_ascii=False, separators=(",", ":")),
                 ),
             )
         video_ids = collect_video_ids(detail_rows)
@@ -310,7 +330,14 @@ def unique_strings(values: list[str]) -> list[str]:
     return result
 
 
-@lru_cache(maxsize=512)
+def metadata_error_reason(exc: Exception) -> str:
+    if isinstance(exc, urllib.error.HTTPError):
+        return f"http_{exc.code}"
+    if isinstance(exc, (ET.ParseError, json.JSONDecodeError)):
+        return "invalid_response"
+    return "transport_error"
+
+
 def niconico_video_metadata(video_id: str, *, timeout: float = 10.0) -> dict[str, str]:
     try:
         page_xml = fetch_text(
@@ -318,12 +345,19 @@ def niconico_video_metadata(video_id: str, *, timeout: float = 10.0) -> dict[str
             timeout=timeout,
         )
         root = ET.fromstring(page_xml)
-    except (ET.ParseError, OSError, TimeoutError):
+    except (ET.ParseError, OSError, TimeoutError) as exc:
         return {
             "title": "ニコニコ動画",
             "thumbnail_url": fallback_niconico_thumbnail_url(video_id),
+            "fetch_error": metadata_error_reason(exc),
         }
 
+    if root.attrib.get("status") == "fail":
+        code = root.findtext(".//error/code") or "UNKNOWN"
+        # Only bounded provider codes enter diagnostics; never include response bodies.
+        reason = code if code in {"DELETED", "NOT_FOUND", "COMMUNITY", "INVALID"} else "UNKNOWN"
+        return {"title": "ニコニコ動画", "thumbnail_url": fallback_niconico_thumbnail_url(video_id),
+                "fetch_error": "provider_" + reason}
     title = clean_text(root.findtext(".//title") or "")
     thumbnail_url = root.findtext(".//thumbnail_url")
     return {
@@ -332,7 +366,6 @@ def niconico_video_metadata(video_id: str, *, timeout: float = 10.0) -> dict[str
     }
 
 
-@lru_cache(maxsize=512)
 def youtube_video_metadata(video_id: str, *, timeout: float = 10.0) -> dict[str, str]:
     fallback_urls = fallback_youtube_thumbnail_urls(video_id)
     fallback = {
@@ -344,10 +377,10 @@ def youtube_video_metadata(video_id: str, *, timeout: float = 10.0) -> dict[str,
     )
     try:
         payload = json.loads(fetch_text(f"https://www.youtube.com/oembed?{query}", timeout=timeout))
-    except (json.JSONDecodeError, OSError, TimeoutError):
-        return fallback
+    except (json.JSONDecodeError, OSError, TimeoutError) as exc:
+        return {**fallback, "fetch_error": metadata_error_reason(exc)}
     if not isinstance(payload, dict):
-        return fallback
+        return {**fallback, "fetch_error": "invalid_response"}
 
     title = payload.get("title")
     thumbnail_url = payload.get("thumbnail_url")

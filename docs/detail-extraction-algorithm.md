@@ -92,8 +92,8 @@ DB構築時に `YYYY年` タグページを全巡回する方式は、対象外�
 抽出範囲:
 
 - 先頭は、最初に見つかった基本情報ラベル行です。
-- 末尾は、基本情報ラベルを見た後に出てくる `曲紹介` 行です。
-- `曲紹介` が見つからない場合は、ページ末尾までを候補にします。
+- 末尾は、基本情報ラベルを見た後に出てくる `曲紹介`・`概要`・`曲の内容`・`歌詞`・`関連動画`・`コメント` の最初の行です。
+- HTMLの見出し要素も、その見出し名にかかわらず終端です。これらの終端が見つからない場合は、ページ末尾までを候補にします。ラベルより前の目次は終端にしません。
 
 対応ラベル:
 
@@ -102,7 +102,7 @@ DB構築時に `YYYY年` タグページを全巡回する方式は、対象外�
 | `作詞` | `lyricist` |
 | `作曲` | `composer` |
 | `編曲` | `arranger` |
-| `唄` | `vocalist` |
+| `唄`, `歌` | `vocalist` |
 | `絵`, `イラスト`, `Illust`, `Illustration`, `Illustrator` | `illustrator` |
 | `動画`, `動画制作`, `映像`, `映像制作`, `MV`, `PV`, `Movie` | `video` |
 | `調声` | `tuning` |
@@ -122,8 +122,8 @@ DB構築時に `YYYY年` タグページを全巡回する方式は、対象外�
 基本情報抽出は、HTML の表ではなく、正規化済みテキスト行に対する状態機械として動きます。
 
 ```text
-lines = useful_lines(soup.get_text("\n"))
-end = first "曲紹介" after at least one credit label
+lines = render block boundaries and br as newlines; preserve inline names
+end = first heading element or introduction/lyrics/related-videos/comments marker after a credit label
 start = first credit label before end
 section_lines = lines[start:end]
 
@@ -141,7 +141,7 @@ while index < len(section_lines):
     while index is inside section_lines:
         if current line is another label and current values do not have an open parenthesis:
             break
-        if current line is "曲紹介", "歌詞", "関連動画", "コメント":
+        if current line is an introduction or section-end marker:
             break
         values += split_credit_text(current line)
         index += 1
@@ -152,20 +152,28 @@ while index < len(section_lines):
 
 ラベル判定:
 
-- `split_credit_label()` は最初の `:` または `：` だけで分割します。
+- `split_credit_label()` は括弧の外にある最初の `:` または `：` で分割します。役割注記内の時刻などのコロンは区切りません。
 - `credit_field_names()` はラベル内の括弧注記を削ってから、`・`, `、`, `,`, `/`, `／` で分割します。
 - 分割後の各要素が対応ラベル表のいずれかで始まれば、その JSON key に対応させます。
 - コロンなし単独行の場合は、`イラスト`, `動画`, `映像`, `Movie` など、対応ラベルそのものと一致する場合だけ項目境界として扱います。
 - `Movie`, `MV`, `PV`, `Illust`, `Illustration`, `Illustrator` などの英字ラベルは完全一致した場合だけ対応ラベルとして扱います。
-- `Movie Editor` や `Logo Designer` のような詳細スタッフ職種は、基本情報の `video` / `illustrator` には含めません。
+- `歌`は完全一致の同義ラベルです。`歌詞英訳`などを歌唱者に対応させません。
+- `イラストと衣装デザインを 担当者`のように、対応する役割説明が`を`と空白で値につながる表記も扱います。
+- 全角空白に続く別の全角コロン付きラベルは、括弧外であれば同一行でも独立した役割として扱います。
+- 役割ラベルの括弧内に`Re:`から始まる別版名、`Remix`、`ver.`、`版`などの別版指定がある場合は、主版へ追加しません。値そのものに付く版注記は原文情報として保持します。
+- `+`に続く`edit`や`Remix`等の別版サブセクションでは走査を終了します。独立した段落・divの先頭にある`(ニコニコ動画版)`等はスタッフ群の見出しであり、前の作者の注記にしません。
+- 折り畳みスタッフ表内で独立ブロックにある`動画担当`等は見出しです。同じ文字列の通常値を一律には除去しません。
+- `Movie Editor` や `Logo Designer` のような詳細スタッフ職種は、基本情報の `video` / `illustrator` には含めません。未対応ラベルでも全角コロン、空白に接する半角コロン、または値が次行なら境界として扱います。半角コロン入りの名前は保持します。
 - `作詞・作曲：Naka-Dai` は `lyricist` と `composer` の両方に `Naka-Dai` を入れます。
 - `Illustration・MV：担当者` は `illustrator` と `video` の両方に `担当者` を入れます。
 - `Animation Coordinator：...` のように `Animation` が複合職種名の一部として出るケースは、誤分類を避けるため `video` ラベルとしては扱いません。
 
 値分割:
 
-- `、`, `,`, `・`, `/`, `／` で分割します。
-- ただし、括弧内の区切り文字は分割しません。
+- `、`, `,`, `・`, `/`, `／`, `､`, `･` で分割します。
+- 括弧内の区切り文字は分割しません。リンクで示された一つの名前の中点・コロンなども保護し、区切り処理の後で元の文字列へ戻します。
+- `a`などのインライン要素は名前の境界ではありません。リンク前の修飾語や方式名を同じ値として保持します。
+- リンクのない複合人名は句読点だけでは判別できない場合があります。`COMPOUND_CREDIT_NAMES`は、別ページの単一リンクと個別レビューで確認した名前だけを保護します。現在のタケ・ヨシキは3581のリンクと2087の作詞欄を根拠とし、綴りの類似や他の曲の担当者から推測して追加しません。
 - 例: `稲葉曇（リズム、ベース、その他）・Neru（ギター、その他）` は 2 人として扱います。
 
 値分割の括弧深度:
@@ -304,7 +312,7 @@ ID 抽出:
 
 - DB構築時の詳細抽出では動画メタデータを取得しません。
 - 必要な場合は `python -m vocaloid_title_search.cli.refresh_video_metadata` が既存DB内のユニークな動画IDを集め、ニコニコ `getthumbinfo` XML と YouTube oEmbed JSON から `title` と `thumbnail_url` を読み、`song_details.payload_json` に書き戻します。
-- メタデータ取得関数は `lru_cache(maxsize=512)` でプロセス内メモ化します。
+- 動画IDは取得前に重複排除します。取得関数の永続メモ化は行わず、同じプロセスで更新を再実行しても新しいレスポンスを取得します。
 
 ## Limitations
 
@@ -321,3 +329,8 @@ ID 抽出:
 - 1ページだけの特殊表記を広すぎる正規表現で拾うこと
 - 作者名の一部である記号を一般の区切り文字として扱うこと
 - 関連動画リンクを通常動画へ昇格させること
+
+曲紹介の抽出は「曲紹介」を優先し、ない場合は「概要」の見出しを使用します。クレジット抽出も両見出しで終了し、後続の紹介文や歌詞を作者名へ混ぜません。独自ラベルの「制作」「聴覚」「トラック」は役割を一意に判断できないため、自動的に作曲者へ読み替えません。
+
+
+紹介文の明示的な節では短い作者コメントも保持します。見出しは「曲紹介」「概要」「曲の内容」を対象とし、曲名行と次の歌詞等の節は含めません。見出しのない断片からの推測には従来の長さ条件を残します。動画URLはホスト・パス・クエリを分けて検査し、ニコニコの数字のみのID、YouTubeでvが先頭以外のクエリも扱います。似たホスト名や不正なIDの部分一致は受け入れません。

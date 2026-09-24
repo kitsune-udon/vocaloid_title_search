@@ -6,12 +6,16 @@
 
 読者が行う判断・作業ごとに改善を分け、担当、依存先、完了条件と検証方法を記録します。状態と担当の意味は開発backlogと共通です。操作できない・誤操作する問題を優先し、次に不足や重複、最後に表現を直します。
 
-採番済み上限: **DOC-068 / DH-005 / DPI-005**。削除済みIDは再利用しません。
+採番済み上限: **DOC-072 / DH-005 / DPI-005**。削除済みIDは再利用しません。
 
 ## Current Work
 
 | ID | Status | Owner | Depends on | Task | Acceptance | Verification |
 | --- | --- | --- | --- | --- | --- | --- |
+| DOC-072 | Done | Agent | DEV-079〜DEV-083 | 要件からの再監査と追加品質・再開条件を文書化 | 直接証拠と限界、追加ディスク容量、原文空応答の扱いが明確 | 文書check・build・操作照合 |
+| DOC-071 | Done | Agent | DEV-071〜DEV-078 | 終了監査と新しい品質・復旧・取得条件を正本へ反映 | 対応内容・計測条件・残課題を追える | docsチェック・build・実装照合 |
+| DOC-070 | Done | Agent | DEV-068〜DEV-070 | 内部責務・通信寿命・公開検証・性能測定を正本へ反映 | 実装の所有箇所と検証方法を追える | docsチェック、VitePress build |
+| DOC-069 | Done | Agent | DEV-062〜DEV-065 | 無料枠向け測定・公開形式・キャッシュの運用を文書化する | 移行順序、旧DB復旧、測定上限を正本から追える | docsチェック、VitePress build |
 | DOC-068 | Done | Agent | DEV-054〜DEV-061 | 品質・再開・公開記録・CIの手順を文書化し完了履歴を整理する | 正本から手順、限界、未設定事項を追える | docsチェック、VitePress build |
 
 ## Review And Cleanup

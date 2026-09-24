@@ -43,18 +43,20 @@ songs
 
 ## Schema Version
 
-現在の DB schema version は `7` です。`metadata.schema_version` に保存し、`database_is_ready()` は次の metadata が揃い、`songs` が空でないこと、アプリ側の schema version と一致すること、曲詳細件数が曲数と一致することを確認します。
+現在の DB schema version は `7` です。`metadata.schema_version` に保存し、ローカルSQLiteの `database_is_ready()` は次の metadata が揃い、`songs` が空でないこと、アプリ側の schema version と一致すること、曲詳細件数が曲数と一致することを確認します。
 
 - `schema_version`
 - `fetched_at`
 - `song_count`
 - `title_length_rule`
 
-schema versionを上げる条件:
+D1公開形式はSQLite schemaとは別にversionを持ちます。現在は `api_publication_v1` 内の `version:1` です。ローカルの4テーブル構造とschema 7を保ち、SQL生成時にこのレコードと検索用索引を追加します。D1形式を変える場合は公開形式version・Workerの対応・移行手順をセットで更新します。
+
+SQLite schema versionを上げる条件:
 
 - table、column、index、metadataの意味を変える
 - Worker APIが期待するDB構造を変える
-- D1投入済みの古いDBを新しいWorkerが読めなくなる
+- SQLiteの旧データを新しい読み手が読めなくなる（D1公開形式だけの変更は公開形式versionで管理する）
 
 schema versionを上げない条件:
 
@@ -68,7 +70,7 @@ schema versionを上げる場合に更新するもの:
 | 対象 | 更新内容 |
 | --- | --- |
 | `vocaloid_title_search/database.py` | `DATABASE_SCHEMA_VERSION`、schema作成SQL、metadata保存 |
-| `cloudflare/worker/src/index.ts` | Workerが期待する schema version と readiness判定 |
+| `cloudflare/worker/src/publication.ts` | Workerが期待する schema version と readiness判定 |
 | `tools/export_d1_sql.py` | D1へ出すtable / index が変わる場合のexport対象 |
 | Python tests | schema、検索、DB品質検査の期待値 |
 | Worker tests | `/health`, `/api/search`, `/api/stats` などのfixture metadata |
@@ -129,8 +131,8 @@ Writer / reader:
 | `url` | 曲ページ URL。主キー、`songs.song_url` への外部キー |
 | `payload_json` | `/api/song-detail` が返す構造化詳細 JSON |
 | `published_year` | 曲詳細ページに付いた年タグから推定した公開年。未取得または未分類の場合は `NULL` |
-| `fetched_at` | 曲詳細取得時刻 |
-| `source_fetched_at` | 元データ側の取得時刻補助。未使用時は空文字 |
+| `fetched_at` | 詳細JSONの最終保存時刻。同一内容の動画再取得では更新しない |
+| `source_fetched_at` | Wiki詳細の取得時刻。動画補完では更新せず、再利用時の鮮度判定に使う |
 | `schema_version` | 曲詳細のスキーマバージョン |
 
 ## song_credit_people
@@ -170,7 +172,7 @@ Writer / reader:
 
 | 種類 | 内容 |
 | --- | --- |
-| Writer | `build_db`, `refresh_video_metadata` |
+| Writer | `build_db`, `refresh_video_metadata`、D1公開レコードは `export_d1_sql.py` |
 | Reader | `validate_db`, Worker `/health`, `/api/metadata` |
 
 | Key | 内容 |
@@ -184,6 +186,7 @@ Writer / reader:
 | `song_count` | DB に登録した曲数 |
 | `detail_schema_version` | 曲詳細のスキーマバージョン |
 | `detail_count` | `song_details` の現在行数 |
+| `api_publication_v1` | D1公開完了レコード（元SQLiteには不要） |
 
 ## Counting Rule
 
@@ -284,7 +287,7 @@ artist_note: 2016～
 
 ## Update Strategy
 
-DB構築CLIは既存DBを直接 `DROP TABLE` せず、同じディレクトリに一時DBを構築します。曲一覧と必要な曲詳細の取得・再利用・品質検査が成功した後に `os.replace()` で差し替えるため、公開APIは更新中でも古い完全なDBか新しい完全なDBのどちらかを読みます。
+DB構築CLIは既存DBを直接 `DROP TABLE` せず、同じディレクトリに一時DBを構築します。曲一覧と必要な曲詳細の取得・再利用・品質検査が成功した後に `os.replace()` で差し替えるため、ローカルSQLiteの読み手は更新中でも古い完全なDBか新しい完全なDBのどちらかを読みます。Worker APIが参照するD1への投入は別工程です。
 
 曲詳細はDB構築時に全曲分を揃えます。再利用時は `source_fetched_at` と抽出コードfingerprintで鮮度を確認します。詳細が揃っていないDBは `database_is_ready()` で未完成として扱います。
 
@@ -318,3 +321,19 @@ uv run --cache-dir .uv-cache python -m vocaloid_title_search.cli.validate_db
 この検査はDBを読み取るだけで、必須テーブル、metadata、曲数と詳細件数、詳細JSON、作曲者派生テーブル、公開年、動画メタデータ件数を確認します。
 
 `validate_db` はDBの成立条件を確認する品質ゲートです。`report_detail_quality` は成立済みDBの中から、紹介文や動画などの抽出改善候補を探すレビュー用レポートです。`report_detail_quality` で欠損候補が出ても、検索DBとして不成立とは限りません。
+
+
+## D1 Publication Record
+
+`tools/export_d1_sql.py` は公開SQL生成時に全件数・関係・詳細JSONを検査し、共通の統計関数で集計します。`metadata.api_publication_v1` の値は、公開形式version、一意なrevision、通常metadataのコピー、統計JSONです。元SQLiteは変更せず、再生成時は保存済み公開レコードを再利用しません。
+
+SQLは最初にmetadataを削除して公開状態を無効化し、全行と索引を投入した最後に公開レコードを書きます。途中で失敗したSQLの続きを飛ばして最終行だけ実行してはいけません。rollback用 `--from-sql` は元レコードを保持したまま最後に復元し、旧DBにレコードがなければ生成しません。
+
+`idx_songs_order` は人気順・同点時の順序を索引で取得するために使います。全体・単一軸の件数は事前集計から読み、作曲者部分一致では該当する曲URLを副問合せで取得します。詳細は [web-api.md](web-api.md#search-cache-and-read-metrics) と [移行手順](operations.md#publication-format-migration) を参照してください。
+
+公開用検査では `detail_contract.py` により、詳細の必須フィールド、型、動画URL、Wiki URL、出典URLの一致を検証します。通常のローカル品質レポートは部分的な詳細と旧形式の動画一覧を扱えますが、そのまま公開することはできません。作曲者索引・公開年は件数だけでなく詳細JSONの値と照合します。
+
+Workerの作曲者名はPythonと同じNFKC・casefold・空白除去規則を使用します。`shared/credit-normalization.ts` は固定Pythonランタイムから生成し、`check_all.sh` が生成結果の一致を検査します。ランタイム更新時は `python tools/generate_credit_normalization.py` を実行し、Unicodeの検索回帰を確認します。
+
+
+曲テーブルも公開前に検査します。元タイトルからタイトル・作者注記・文字数を再計算して保存値と比較し、取得順が1からの連続した一意な整数であること、人気度スコアと根拠タグが対応することを確認します。曲数が同じでも検索条件や並び順を壊す変更は拒否します。この検査はローカル品質ゲートと公開レコード生成の両方で行います。

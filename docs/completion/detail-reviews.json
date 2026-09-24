@@ -1,0 +1,853 @@
+{
+  "59835": {
+    "source_sha256": "1466724ffb59b712d4d6e5ccb75487201a1fe3fe7ab89a5b4b00b38f28c080f0",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は曲名・読みのみ、または紹介節自体がなく、説明文は存在しない。歌詞やコメントを紹介として流用しない。"
+  },
+  "37642": {
+    "source_sha256": "08a0b01af8210222b93c25a26dc353bc9e5c874dd131cbb74bd844eb2a314487",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は曲名・読みのみ、または紹介節自体がなく、説明文は存在しない。歌詞やコメントを紹介として流用しない。"
+  },
+  "37778": {
+    "source_sha256": "70062f1802fd73a8af1e6272a4d88e614c7857e25cc9737d79f6918e7201d561",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は曲名・読みのみ、または紹介節自体がなく、説明文は存在しない。歌詞やコメントを紹介として流用しない。"
+  },
+  "38708": {
+    "source_sha256": "a8869ac766798b7b5efa1c22b3ac42f59561b04cdcff3f852c0fca30ddeb6013",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は曲名・読みのみ、または紹介節自体がなく、説明文は存在しない。歌詞やコメントを紹介として流用しない。"
+  },
+  "38718": {
+    "source_sha256": "6afd667af1644cf9842198de8992273e799574692858baa46d59b6895aaa3a47",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は曲名・読みのみ、または紹介節自体がなく、説明文は存在しない。歌詞やコメントを紹介として流用しない。"
+  },
+  "40249": {
+    "source_sha256": "426cd78588bb52b5d900ef7fb9e9445805a74509b1496da808e0ac00b0271436",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は曲名・読みのみ、または紹介節自体がなく、説明文は存在しない。歌詞やコメントを紹介として流用しない。"
+  },
+  "41357": {
+    "source_sha256": "7d662cf1f50dc274215bd67c7d8f9fc8f5ad16cadd2d82ee590d7d6948e309f3",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は曲名・読みのみ、または紹介節自体がなく、説明文は存在しない。歌詞やコメントを紹介として流用しない。"
+  },
+  "41882": {
+    "source_sha256": "b5067e5b46b7e51f5d85c877af1f1f3b5be88b2045d3708ccbbb200812e36f54",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は曲名・読みのみ、または紹介節自体がなく、説明文は存在しない。歌詞やコメントを紹介として流用しない。"
+  },
+  "41922": {
+    "source_sha256": "1bd84ca886da0078eb4eeaba35238b97519ea022fc9a76de52944f912f53680e",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は曲名・読みのみ、または紹介節自体がなく、説明文は存在しない。歌詞やコメントを紹介として流用しない。"
+  },
+  "44984": {
+    "source_sha256": "1a88981ea085f95f0e5c717d9a968239fb7de1fa304a5534468462cb7ec83ee7",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は曲名・読みのみ、または紹介節自体がなく、説明文は存在しない。歌詞やコメントを紹介として流用しない。"
+  },
+  "45477": {
+    "source_sha256": "14ebe963fff76d400bcba17b16dd553f1811d9579c27bf40a64e403e2de972b2",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は曲名・読みのみ、または紹介節自体がなく、説明文は存在しない。歌詞やコメントを紹介として流用しない。"
+  },
+  "47202": {
+    "source_sha256": "43545acb64d1edf6c535e44034b38f9c6422417b114aed7aaa15c40861fbfb8e",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は曲名・読みのみ、または紹介節自体がなく、説明文は存在しない。歌詞やコメントを紹介として流用しない。"
+  },
+  "51006": {
+    "source_sha256": "3096954e8af09fb1e02b5a693a56dd378840ee8d606a4a314aea3bb0ec73fb1d",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は曲名・読みのみ、または紹介節自体がなく、説明文は存在しない。歌詞やコメントを紹介として流用しない。"
+  },
+  "53765": {
+    "source_sha256": "33b858f8c4f5ad308914cde9728bf46562d4b1f6164efb03e5fe3b2bf7ce3820",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は曲名・読みのみ、または紹介節自体がなく、説明文は存在しない。歌詞やコメントを紹介として流用しない。"
+  },
+  "54624": {
+    "source_sha256": "323fbfee13a8595c189fa4ad12b35861e44711121a069733e3ce96b55206e60e",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は曲名・読みのみ、または紹介節自体がなく、説明文は存在しない。歌詞やコメントを紹介として流用しない。"
+  },
+  "60451": {
+    "source_sha256": "af14a774c13ad0b5e3db502b83bff166d9fbc3da9331e36342ba3e3b8b379f6e",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は曲名・読みのみ、または紹介節自体がなく、説明文は存在しない。歌詞やコメントを紹介として流用しない。"
+  },
+  "60795": {
+    "source_sha256": "d17f04863f668c37d20b2739a7d4866208b21b909694004e72c50ad2dbd58ca9",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は曲名・読みのみ、または紹介節自体がなく、説明文は存在しない。歌詞やコメントを紹介として流用しない。"
+  },
+  "61287": {
+    "source_sha256": "5664fd313119fa88949bc30f7cf06c42c99b627b22d7c5a1c87b31a84611663c",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は曲名・読みのみ、または紹介節自体がなく、説明文は存在しない。歌詞やコメントを紹介として流用しない。"
+  },
+  "64816": {
+    "source_sha256": "cc582ec8813ddf7037224abc4aa7777dd3ea442f773ea9a85f10e134dbbfb00b",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は曲名・読みのみ、または紹介節自体がなく、説明文は存在しない。歌詞やコメントを紹介として流用しない。"
+  },
+  "65993": {
+    "source_sha256": "75e287be09c261227187c82c3611400da6797c0493a9a37bb2860e0f5e00f157",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は曲名・読みのみ、または紹介節自体がなく、説明文は存在しない。歌詞やコメントを紹介として流用しない。"
+  },
+  "72964": {
+    "source_sha256": "1385519a2a6447688a4b56394ffb8f1f2a461671e4f9272295d0bd8128218332",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は曲名・読みのみ、または紹介節自体がなく、説明文は存在しない。歌詞やコメントを紹介として流用しない。"
+  },
+  "90": {
+    "source_sha256": "12df6b4528e28431e648b8552e28968b785758bce74306834d1ab2aaa733e595",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は曲名・読みのみ、または紹介節自体がなく、説明文は存在しない。歌詞やコメントを紹介として流用しない。"
+  },
+  "160": {
+    "source_sha256": "6a2bea2a46edf7f4209f9ac6ce7c72d270a03b1883c84c33460c343e2202c171",
+    "field": "introduction",
+    "expected": [
+      "さよなら。"
+    ],
+    "assessment": "extractor_fix",
+    "rationale": "曲紹介見出し内の短文を原文で確認。曲名行と次の歌詞を除き、その短文を保持する。"
+  },
+  "40186": {
+    "source_sha256": "8bafc6313bd6b517ce772ab296a11cc414cc9acd860632b51796f9a48b9ca8fd",
+    "field": "introduction",
+    "expected": [
+      "「マギサ」"
+    ],
+    "assessment": "extractor_fix",
+    "rationale": "曲紹介見出し内の短文を原文で確認。曲名行と次の歌詞を除き、その短文を保持する。"
+  },
+  "44820": {
+    "source_sha256": "535ce2e7746a57767ba70a54e184dda8c27775a3877845d9a087fec4f2e4dea0",
+    "field": "introduction",
+    "expected": [
+      "HE?L."
+    ],
+    "assessment": "extractor_fix",
+    "rationale": "曲紹介見出し内の短文を原文で確認。曲名行と次の歌詞を除き、その短文を保持する。"
+  },
+  "379": {
+    "source_sha256": "69406f9b9968ccb45c0e48f02562cd24147b0f7b768033aadfb673b11b5a32c1",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "455": {
+    "source_sha256": "b8a022c99429d917b2efc4066de320f291ea76888a2b4e3fe415aa010a28044d",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "548": {
+    "source_sha256": "2df778f5eb4498911c976343726cbdaf2b192ec2e8bbba18dea73c174f505c3f",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "602": {
+    "source_sha256": "bd61e4ac4a670412a27425d605bd7ff9db2c01263e9efecc96d8c8134f552eaa",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "672": {
+    "source_sha256": "e892b5aaac8cdb5138a2ab700d9849afc9fef69735df356db96fdfc21a6f9ee2",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "814": {
+    "source_sha256": "0e6553f873f03cba8fc61c13587c87c8ea2eb13508a3523ccbede6e72e9c89af",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "1791": {
+    "source_sha256": "69b83218e08522636695c967cf0bc41bf503e5b914ed2c5a1eb472cb136d1299",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "1828": {
+    "source_sha256": "ed698a4ac27611926890d4ac7e66d823078d535fd7d776c339770dbc7350c891",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "1935": {
+    "source_sha256": "afbf6a659af2898218a4adc84fd3917c97ff6fa0f5d7ed47d3d7191e88dc9bf5",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "2087": {
+    "source_sha256": "e889d26d900350a4356485dd0d2595c97b1d2939552878d1873661df1d46152c",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "2101": {
+    "source_sha256": "6286eea4d0c391fb5d8d99452fcbcabed0602966949d327716ed137d76fdbac2",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "2195": {
+    "source_sha256": "1ace077b5350d9440ea842038493a8105871ae7c533a28d6d7f0c82e4d6b3ce3",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "2196": {
+    "source_sha256": "d861e2a63bdd7096f47921fa280a881591399df6774542b0a0211d8b40ee17d8",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "2360": {
+    "source_sha256": "447fc0d6d3a6acb7a78b33a21b65b605217ad00cf0aa8ca8bc1dcbec8cb5abdd",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "2600": {
+    "source_sha256": "1a0585b16b4273df97a15a50cce43672ea91fb5a5193c1f5b32efce8061d60aa",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "2750": {
+    "source_sha256": "6a6a771be07fdd5383c227d92f132daa599965da5cb9bf7c9dc52d64b8d222ff",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "3707": {
+    "source_sha256": "c7a91595badf431e74cf9ee58d16db4c70e72e80fdced237fe8ea53a967b2f20",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "4103": {
+    "source_sha256": "8a808b343a7c7b9246c341f53b4f5f2800463c18374d20e5bbb025affbb41255",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "4104": {
+    "source_sha256": "f1605ab971d60842f48b78c4f8629a4332ab3661b0970409d02e07c73f33e72a",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "4130": {
+    "source_sha256": "6811263a00d01cffc634bfe36887532bc4a84219b037088f6c40959dfd8992f0",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "4194": {
+    "source_sha256": "d4becd19391439c773d78fa05ba82f5e3bd09c698eb3ec9c13c07e6aa3368304",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "4198": {
+    "source_sha256": "03d43da209ed7bb092fdb3165a9c4ea6de24321c81362ea6eb525205b7f7bd7a",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "4421": {
+    "source_sha256": "5e8c01093c0862c4aecea3db5bd60b1d949683e911a6abe7a9d7feb591d7010a",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "4560": {
+    "source_sha256": "1c79279a7d975a90c569549ce81cd72604b677543180d6d3e9063d495eb65bf5",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "5191": {
+    "source_sha256": "5dd9bddc2e397496654c57c208b9045951baef01bc93d36fca139652ca9ca5c2",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "5193": {
+    "source_sha256": "9ec14f47b9962731a8a6efc21153b904188101adc6cccf4a5341cf32dea4f8a1",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "5218": {
+    "source_sha256": "184fe6dde64f8919d0ba0668b71e6472b50a5bb24b266e7deaae898088f36514",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "5233": {
+    "source_sha256": "7556af717d792ce58c91c660827d1242fbef8a3d2b0a4133b9a52b43a690139e",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "5368": {
+    "source_sha256": "d720dc9c0025b34780799cb0692b445d2d378ec0b01c52853bbcb2f151ba68de",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "5536": {
+    "source_sha256": "d5fef7b2f83983682d73da1d3630db4cfa8b35549fc8652f2e836c6a8d3a6240",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "5927": {
+    "source_sha256": "2f80fb1f816c0dae1707303be6f6cca266464313b7d819654794204f1933f95f",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "6010": {
+    "source_sha256": "7ae2159d1fc36cc90d339e24c7129e063219d8c6e8bfd69d789bbed98fadbc87",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "6012": {
+    "source_sha256": "e5f133e635e8aed56611bf795114ffdf40f92d640b85ebfab2e15a986ab746ca",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "6165": {
+    "source_sha256": "70272ea7094a29ef687383adc570283fa9c066ddf71ef9e3df28cfa8b5615eca",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "6223": {
+    "source_sha256": "6ee78f7f98b9569f8f756446a60e17af041a0154801b34df0486e6f8079ef4d3",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "7073": {
+    "source_sha256": "cebe65b443c088c1b0a718534eb1a169d0b035a92b9a8425a93110f45b8d450a",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "7676": {
+    "source_sha256": "da5906be1c0f0f300e517dadbe60f7c8c66884dab8933d5f33d85798ec7a6607",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "9838": {
+    "source_sha256": "f3193d0174f8e92c74935686cd6596fb0e723de819ee51cd2b9da9a9ef2d381a",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "9957": {
+    "source_sha256": "d0ded8c51add4e3efe0fad6f612fe40ae50adde59885acd0f521e694edca193f",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "11073": {
+    "source_sha256": "0b490a51cd5ddc74ed6938e19c604cfaf350b9a6f09f88c1fd2d89f7498b4dea",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "11455": {
+    "source_sha256": "8c3a8944f074e6090815f9da68512897105ac682c219559e2e99d8ee405f74b7",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "15480": {
+    "source_sha256": "16c1c876b0330a931247871250131b8aad9eb5003b993f6a868715f26d18b584",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "15513": {
+    "source_sha256": "46338dda6d0fa50f94c894c72917e50d2b2fba3e725e4277c5824ea92adcf647",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "15566": {
+    "source_sha256": "8256382da69072ee0f5639167254e18a58b6243bbe44b73809cf1e63d60fd8f4",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "16639": {
+    "source_sha256": "48478c3c09d1ddba3d24cd6276093d6de35a30cf3fe5d6fb4bbf90dcb36b81b5",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "18732": {
+    "source_sha256": "7f5318490cadcc7879588d024432225cfa01b8d93e71cb09a50c533d79c46b89",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "21048": {
+    "source_sha256": "ae63a692c8ad9800597104e3e11c28b60aae75e53cc18b3a7b776f93d2383b28",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "クレジットの後は音楽配信の販売情報と歌詞。販売情報を曲の紹介文とみなさず、存在しない紹介文を補わない。"
+  },
+  "22126": {
+    "source_sha256": "457de46b68cc03877ebad031191f4f516826cdf816efeba8c654730cf00ec97c",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "22196": {
+    "source_sha256": "9fa5dab01a5d7f9566684fbdb041daca2889ba15ad875f91c53734f5e7385c4c",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "22326": {
+    "source_sha256": "06f4a161053174389af74f92fe30db78bd6d202072cb23aa8607ca4ab2ddbf9e",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "23904": {
+    "source_sha256": "2a66d0cf6d834c500031a2c870fbfc641ca482d6e05e0a80450cedbf29a44a79",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "24689": {
+    "source_sha256": "7487603492594dbe13941cc64fb05dd5d22779e75a57542f89fffd4e73233703",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "25397": {
+    "source_sha256": "d30d497f56c80b09ad944a4c2c8e3158a35be0d94c12d530ae1ba61c6e96ec04",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "25986": {
+    "source_sha256": "b77b80437f1edf86fb107b3409ffbd362e5bc2a5935df55ec6a461e6c3d6df6d",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "クレジットの後は音楽配信の販売情報と歌詞。販売情報を曲の紹介文とみなさず、存在しない紹介文を補わない。"
+  },
+  "26238": {
+    "source_sha256": "4fa2bf92edcbc6ec381c5908e2c7cf5469835830b10ee6f14f705bdb464da68c",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "26537": {
+    "source_sha256": "f343d8669c1d77eb8ae607d6f3f0a7821710909dfc77b9a35297d831297c321a",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "28850": {
+    "source_sha256": "b69ab2f1fb76b47eccd0a0b2d345001cfcdccd0896bf41a2e5a7a1095149adf5",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "28876": {
+    "source_sha256": "330ef0596b7f21a43c695fd16d50eb3cd46a127fc485460cb67198a7ed609788",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "34399": {
+    "source_sha256": "9dc4194bd5c29c9d8350d473a3922f39bc4d389bc850f95a634022902209d8a3",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "36028": {
+    "source_sha256": "e94a2b0c4dddff5695dac4dba7210cf7f07dfc2cba54e18d36538b6cc87187cf",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "36106": {
+    "source_sha256": "e149bb84013a7184b123203cfb393b4658d8402b90ad99047d3a2c2b3ec53446",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "37761": {
+    "source_sha256": "573ddce9053ca195a1d657618891cacb2fa70217e9af7c82442bf4cc67d4d34b",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "38647": {
+    "source_sha256": "1bd82f60184bd8c77218382096c17c848f7bdbb904816de0876ea90b5d8b463a",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "42626": {
+    "source_sha256": "4ad1e494cbb5e04532e27c232f752d2db409fc823df27087d90bb6222b3acc07",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "45490": {
+    "source_sha256": "9d9a597a6b292ce4467ebeb8ecd39fee9c07f00bd413bd3a5cd688ed36d7e6fc",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "46581": {
+    "source_sha256": "2476c2fb59c20879ad33ffef23fcfab153bafa901fbd3873ba2ba2b064301714",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "51065": {
+    "source_sha256": "175b1e60349bb4a5ab61e5984c6b682097dc7d832a256f14d11cf7a644db6403",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "53303": {
+    "source_sha256": "e8132a839a0492c53b1fcb48577b2790402531c8cf6ec8e6a32c3854aac672fc",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "54773": {
+    "source_sha256": "957d179e4deda1a2c519e1cde0544d675fd426a14ba4147d99ea01fc0cfb8a1e",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "56434": {
+    "source_sha256": "8802fe114d46ae650f4070f0779ef11e45a0a17fcc4308207c62b2549f3f573f",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "56474": {
+    "source_sha256": "e134f80adc6ecad4df8cd1864ee3ce93e81f37d39871d55f22e6472d7655aa73",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "58241": {
+    "source_sha256": "7c133a2403d4b9c064ca30b2c0cff3a294580333bb691279e34dc74d1649db9a",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "62687": {
+    "source_sha256": "fd7169c549d0b461f77266cd44774e868fad4d7916c3d1366bed4d5f41c55f61",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "64130": {
+    "source_sha256": "8732b920774796b55281676ff888cf3b20e2a603a0dd404a4f3b78317a073f0a",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "72807": {
+    "source_sha256": "4072561de630332396ff2ae7367626d976ce345185db8d2d49a662eb416ba60c",
+    "field": "introduction",
+    "expected": [],
+    "assessment": "source_absent",
+    "rationale": "本文のクレジットから歌詞までを個別確認。紹介節は空・曲名と読みのみ、または紹介節自体がない。歌詞・コメントは説明文へ転用しない。"
+  },
+  "21616": {
+    "source_sha256": "358c4d3860ef7e1fa82bbe3bbb4ee4f14aa86adf9cc2017f82dff463d1ec4b6d",
+    "field": "introduction",
+    "expected": [
+      "捧ぐ"
+    ],
+    "assessment": "extractor_fix",
+    "rationale": "紹介節の明示的な短文を原文で確認。文字数のみで除外すべきではない。"
+  },
+  "30896": {
+    "source_sha256": "8d6583545626c6e2bda27b47041ff54e610c7aaa2e9435e64b304ca6cea91bf9",
+    "field": "introduction",
+    "expected": [
+      "息が止まる"
+    ],
+    "assessment": "extractor_fix",
+    "rationale": "紹介節の明示的な短文を原文で確認。文字数のみで除外すべきではない。"
+  },
+  "37017": {
+    "source_sha256": "769ef49af83ddce6b838910145db4e90e1a0a0138171e7d9a8e1feb895a20a3f",
+    "field": "introduction",
+    "expected": [
+      "☆彡"
+    ],
+    "assessment": "extractor_fix",
+    "rationale": "紹介節の明示的な短文を原文で確認。文字数のみで除外すべきではない。"
+  },
+  "53510": {
+    "source_sha256": "e155c209c3bf9b90ebc2e992a9c3e6beb9f5dc7740a77b2228ca3bc17b335b40",
+    "field": "introduction",
+    "expected": [
+      "期待と不安"
+    ],
+    "assessment": "extractor_fix",
+    "rationale": "紹介節の明示的な短文を原文で確認。文字数のみで除外すべきではない。"
+  },
+  "54658": {
+    "source_sha256": "f8a4d48ae9335311e0c8e0ecafc16c415b0f644a09e487e27bd6ffa347f35693",
+    "field": "introduction",
+    "expected": [
+      "ゆる"
+    ],
+    "assessment": "extractor_fix",
+    "rationale": "紹介節の明示的な短文を原文で確認。文字数のみで除外すべきではない。"
+  },
+  "53766": {
+    "source_sha256": "b4c7686241cbb9c35019665334293980414be72b919f7b267723818fb976787e",
+    "field": "introduction",
+    "expected": [
+      "全てわたくしの所為です。",
+      "全てあなたの所為です。の4作目であり、YouTubeではこの曲が一番最初に上げられた。",
+      "動画上では歌詞は文字化けしており、普通に聞いても歌詞を聞き取ることは不可能だが、 逆再生 することで聞き取ることができるようになる。"
+    ],
+    "assessment": "extractor_fix",
+    "rationale": "曲の内容見出しに作者コメントと解説2項目が存在する。歌詞節までの内容を確認。"
+  },
+  "63717": {
+    "source_sha256": "686322a40155efc6972ad1f641592182ee049ecc47fdf312a78e66c328ba0a35",
+    "field": "introduction",
+    "expected": [
+      "見ないで",
+      "2024年10月19日に投稿されたなきそ氏のオリジナル曲。",
+      "ゲーム『 プロジェクトセカイ カラフルステージ！ feat.初音ミク 』のユニット『25時、ナイトコードで。』への書き下ろし楽曲。 『25時、ナイトコードで。』の10thシングル『 エンパープル / 化けの花 』収録曲。",
+      "2025年2月3日にセカイver.が ミリオン を達成した。",
+      "後の2025年8月13日にバーチャル・シンガーver.が自身3曲目となる ミリオン を達成、現在VOCALOIDオリジナル曲でミリオンを達成している楽曲の1つである。"
+    ],
+    "assessment": "extractor_fix",
+    "rationale": "概要見出しの解説と冒頭短文を確認。後続の別ユニット紹介や歌詞を混ぜない。"
+  },
+  "7551": {
+    "source_sha256": "49770a93ed00aa1d5c0f316b5acca5375a6de3f9e951184c6e99d70bb2df6e90",
+    "field": "niconico_primary_ids",
+    "expected": [
+      "1266843314",
+      "1259943720"
+    ],
+    "assessment": "extractor_fix",
+    "rationale": "曲本文に上記の数字のみのIDを持つニコニコ埋め込みが存在する。削除済みというタグの有無でURLそのものを失わせない。外部での再生可能性とは別に扱う。"
+  },
+  "8459": {
+    "source_sha256": "42a34953a1a3cf50622e4667523cb98ca490ebd94d946f5d214db5955a56f68c",
+    "field": "niconico_primary_ids",
+    "expected": [
+      "1264787550",
+      "1258172682"
+    ],
+    "assessment": "extractor_fix",
+    "rationale": "曲本文に上記の数字のみのIDを持つニコニコ埋め込みが存在する。削除済みというタグの有無でURLそのものを失わせない。外部での再生可能性とは別に扱う。"
+  },
+  "10671": {
+    "source_sha256": "3db47abba48604b94f15a299d00f3aeb07fe7a0ed995639964b34448d879c024",
+    "field": "niconico_primary_ids",
+    "expected": [
+      "1278053154"
+    ],
+    "assessment": "extractor_fix",
+    "rationale": "曲本文に上記の数字のみのIDを持つニコニコ埋め込みが存在する。削除済みというタグの有無でURLそのものを失わせない。外部での再生可能性とは別に扱う。"
+  },
+  "12836": {
+    "source_sha256": "473bfbcc38c004af3498364d3bec7f727bded4eb1f74b606ebb4200e12494718",
+    "field": "niconico_primary_ids",
+    "expected": [
+      "1288861519"
+    ],
+    "assessment": "extractor_fix",
+    "rationale": "曲本文に上記の数字のみのIDを持つニコニコ埋め込みが存在する。削除済みというタグの有無でURLそのものを失わせない。外部での再生可能性とは別に扱う。"
+  },
+  "19268": {
+    "source_sha256": "225573ba6dd1023edb2f003a3c0d005ab47da8023d27d6748af0a4336fe59031",
+    "field": "niconico_primary_ids",
+    "expected": [
+      "1313372476",
+      "1314759105"
+    ],
+    "assessment": "extractor_fix",
+    "rationale": "曲本文に上記の数字のみのIDを持つニコニコ埋め込みが存在する。削除済みというタグの有無でURLそのものを失わせない。外部での再生可能性とは別に扱う。"
+  },
+  "13470": {
+    "source_sha256": "a94dd24f323d12bc653b1b971616e4682b0a0156ca57b24288864b6e6c9bee91",
+    "field": "composer",
+    "expected": [],
+    "assessment": "source_unspecified",
+    "rationale": "A〜Fパートは制作と唄の表記。制作が作曲だけを意味するとは原文から確定できず、作曲者欄へ人物名を推定登録しない。"
+  },
+  "29375": {
+    "source_sha256": "a2aee5e880bf997f3414aff93d90422e8a17dec7f66c164576e62461e2a65b02",
+    "field": "composer",
+    "expected": [],
+    "assessment": "source_unspecified",
+    "rationale": "原文は作詞:松傘、トラック:MSSサウンドシステム、唄:初音ミク。作曲の明記はなく、トラック制作と作曲の同一性を推測しない。"
+  },
+  "66159": {
+    "source_sha256": "55416e7850629f564b8430e58f31b8eeff81f2275dffb299c368da035064233f",
+    "field": "credits",
+    "expected": {},
+    "assessment": "source_unspecified",
+    "rationale": "原文の役割は聴覚:ぴーなた、視覚:白ロック、聴覚:重音テト。聴覚が人物と歌唱音源の両方に使われており既定の作詞・作曲・歌唱等へ一意に対応しない。既知役割欄へ誤分類しない。"
+  },
+  "61887": {
+    "source_sha256": "dad6d0dadc6bc262365a8756d348a7099ff5e4845c450d0ba769402cffd5b2cb",
+    "field": "published_year",
+    "expected": null,
+    "assessment": "source_unspecified",
+    "rationale": "登録タグにYYYY年が存在しないことを確認。公開年はWikiの年タグに基づく仕様のため、取得日時や別の動画の日付から推定しない。"
+  }
+}

@@ -7,11 +7,13 @@ import json
 from pathlib import Path
 import sqlite3
 
+from vocaloid_title_search.detail_contract import valid_detail
 from vocaloid_title_search.database import DETAIL_SCHEMA_VERSION, connect_readonly, save_song_detail
 
 
 @contextmanager
 def build_lock(db_path):
+    db_path = db_path.resolve()
     db_path.parent.mkdir(parents=True, exist_ok=True)
     with db_path.with_name(f".{db_path.name}.build.lock").open("a") as lock:
         try:
@@ -30,9 +32,18 @@ def extractor_fingerprint():
     return digest.hexdigest()
 
 
+def corpus_fingerprint():
+    digest = hashlib.sha256()
+    for name in ("wiki.py", "models.py"):
+        digest.update(name.encode() + b"\0")
+        digest.update(Path(__file__).with_name(name).read_bytes())
+    return digest.hexdigest()
+
+
 def checkpoint_identity(args):
     return json.dumps({"source_url": args.source_url, "target": str(args.db_path.resolve()),
                        "schema": DETAIL_SCHEMA_VERSION, "extractor": extractor_fingerprint(),
+                       "corpus": corpus_fingerprint(),
                        "video_metadata": args.with_video_metadata}, sort_keys=True)
 
 
@@ -68,7 +79,8 @@ def reuse_details(previous, candidate, days):
             try:
                 timestamp = datetime.fromisoformat(fetched)
                 detail = json.loads(payload)
-                if timestamp.tzinfo is None or not cutoff <= timestamp <= datetime.now(timezone.utc) or not isinstance(detail, dict):
+                if (timestamp.tzinfo is None or not cutoff <= timestamp <= datetime.now(timezone.utc)
+                        or not isinstance(detail, dict) or not valid_detail(detail, url, complete=True)):
                     continue
             except (ValueError, TypeError):
                 continue

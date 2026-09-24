@@ -41,7 +41,7 @@ uv run --cache-dir .uv-cache python -m vocaloid_title_search.cli.build_db
 | `--workers` | `8` | 曲詳細ページ取得の最大並列数 |
 | `--resume` | `false` | チェックポイントを保持し、保存済み詳細を再取得せず再開する |
 | `--reuse-details-days` | `0`（無効） | 指定日数内の詳細を前回DBから再利用。指定する値は正の整数 |
-| `--with-video-metadata` | `false` | 両動画サービスの補完・公開品質検査後にDBを差し替える。動画補完は32並列・間隔0秒、タイムアウトと再試行設定は共通 |
+| `--with-video-metadata` | `false` | 両動画サービスの補完・公開品質検査後にDBを差し替える。動画補完は8並列・間隔0.02秒、タイムアウトと再試行設定は共通 |
 | `--timeout` | `20.0` | 1 HTTP リクエストのタイムアウト秒数 |
 | `--request-interval` | `0.2` | 同一ホストへの最小リクエスト間隔秒数 |
 | `--max-retries` | `2` | 429/502/503/504 の最大リトライ回数 |
@@ -71,9 +71,9 @@ uv run --cache-dir .uv-cache python -m vocaloid_title_search.cli.refresh_video_m
 | Option | Default | 内容 |
 | --- | ---: | --- |
 | `--db-path` | `vocaloid_titles.sqlite3` | 更新対象の SQLite DB |
-| `--workers` | `32` | 動画メタデータ取得の最大並列数 |
+| `--workers` | `8` | 動画メタデータ取得の最大並列数 |
 | `--timeout` | `20.0` | 1 HTTP リクエストのタイムアウト秒数 |
-| `--request-interval` | `0.0` | 同一ホストへの最小リクエスト間隔秒数 |
+| `--request-interval` | `0.02` | 同一ホストへの最小リクエスト間隔秒数 |
 | `--max-retries` | `2` | 429/502/503/504 の最大リトライ回数 |
 | `--backoff-base` | `2.0` | Retry-After がない場合の初回待機秒数 |
 | `--backoff-max` | `30.0` | バックオフ待機の最大秒数 |
@@ -81,6 +81,8 @@ uv run --cache-dir .uv-cache python -m vocaloid_title_search.cli.refresh_video_m
 このコマンドは曲詳細ページを再取得しません。`song_details.payload_json` 内の `videos` / `related_videos` からユニークな動画IDを集め、動画メタデータだけを書き戻します。
 
 再実行しても、同じ動画IDは同じ詳細JSON内で更新されるだけです。途中失敗後に再実行できます。外部動画サービスに到達できないIDは、既存値またはフォールバック値が残ることがあります。
+
+取得ログにはサービス別の成功・失敗・フォールバック件数に加え、`http_429`、`provider_DELETED`、`invalid_response` などの理由別件数と動画IDの例を出力します。通信障害と削除済み動画を区別し、成功率が下がった場合はログを保存して原因を調べます。診断用の `fetch_error` は公開する動画JSONには保存しません。過去の実行に理由の記録がない場合、429などの原因を成功率だけから断定しないでください。
 
 ## validate_db
 

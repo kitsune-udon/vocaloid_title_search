@@ -22,6 +22,8 @@ class RefreshVideoMetadataCliTests(unittest.TestCase):
         self.assertEqual(args.workers, DEFAULT_VIDEO_METADATA_WORKERS)
         self.assertEqual(args.timeout, DEFAULT_TIMEOUT)
         self.assertEqual(args.request_interval, DEFAULT_VIDEO_METADATA_REQUEST_INTERVAL)
+        self.assertGreater(args.request_interval, 0)
+        self.assertLessEqual(args.workers, 8)
         self.assertEqual(args.max_retries, DEFAULT_MAX_RETRIES)
         self.assertEqual(args.backoff_base, DEFAULT_BACKOFF_BASE)
         self.assertEqual(args.backoff_max, DEFAULT_BACKOFF_MAX)

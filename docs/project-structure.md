@@ -10,6 +10,7 @@ vocaloid_title_search/
   detail.py          曲ページ詳細の構造化抽出
   database.py        SQLite schema、検索、詳細保存/読込
   video_metadata.py  動画メタデータ取得と詳細JSON更新
+  detail_contract.py 公開用詳細の型・URL検証
   cli/
     common.py        CLI共通オプション
     build_db.py      DB構築CLI本体
@@ -19,8 +20,8 @@ vocaloid_title_search/
                      検索CLI本体
 
 frontend/
-  src/components/    統計ビュー、動画カード
-  src/composables/   検索の状態・競合リクエスト制御
+  src/components/    検索フォーム、結果一覧、統計ビュー、動画カード
+  src/composables/   入力条件、検索結果、詳細通信の状態と寿命
   tests/integration/ 実Worker + local D1を通すPlaywright tests
   src/               Vue + TypeScript UI
   tests/e2e/         Playwright E2E smoke tests
@@ -29,6 +30,7 @@ frontend/
 
 shared/
   api-types.ts       frontend と Worker が共有するAPI型
+  credit-normalization.ts Pythonから生成するWorker向けcasefold例外表
 
 cloudflare/
   worker/            Cloudflare Worker API
@@ -46,6 +48,24 @@ tools/               repository checks, D1 SQL generation, smoke test, maintenan
 .node-version        nodenv が使う Node.js version
 AGENTS.md            coding agent rules
 ```
+
+## Internal Responsibilities
+
+公開API型とDB schemaは互換性の境界として維持し、画面・検索・公開処理の責務を分けます。抽出アルゴリズムは既存の入力例を回帰テストで守り、運用と実行時のボトルネックを個別に改善します。
+
+| 領域 | 所有する状態・処理 |
+| --- | --- |
+| `frontend/src/App.vue` | 画面切替、固定検索欄、検索と統計の連携 |
+| `useSearchFilters.ts` / `useSongSearch.ts` | 入力中の条件と適用済み条件、検索の競合制御 |
+| `SearchResults.vue` / `useSongDetails.ts` | 結果の描画、展開、詳細通信とページ単位のキャッシュ |
+| `frontend/src/api.ts` / `errors.ts` | HTTPの期限と中断、利用者向けエラー |
+| `cloudflare/worker/src/index.ts` / `http.ts` | ルーティング、HTTP応答、CORS、エラー |
+| `handlers.ts` / `search-query.ts` | 検索処理、入力正規化、SQL条件と並べ替え |
+| `publication.ts` / `search-cache.ts` / `database.ts` | 公開revision、短期キャッシュ、D1読み取り計測 |
+| `tools/release_artifacts.py` / `incremental_release.py` | 固定snapshot、順方向と復旧の検証、限定的な差分SQL |
+| `tools/release_state.py` | 成果物hash、atomicなファイル置換、DB状態比較 |
+
+共通処理からCLIの調停処理へ依存させません。公開と差分生成が同じ検証部品を使い、通常投入・差分投入ともsnapshotとの一致を確認します。
 
 ## CLI
 

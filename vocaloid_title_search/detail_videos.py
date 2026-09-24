@@ -9,16 +9,6 @@ from vocaloid_title_search.detail_text import clean_soup, clean_text, find_last_
 EXCLUDED_VIDEO_SECTION_HEADINGS = {"英語版"}
 
 
-NICONICO_ID_PATTERN = re.compile(
-    r"(?:nicovideo\.jp/watch/|ext\.nicovideo\.jp/thumb/)((?:sm|nm|so)\d+)"
-)
-
-
-YOUTUBE_ID_PATTERN = re.compile(
-    r"(?:youtube\.com/(?:watch\?v=|embed/)|youtu\.be/)([A-Za-z0-9_-]{11})"
-)
-
-
 IFRAME_SRC_PATTERN = re.compile(r"<iframe\b[^>]*\bsrc=[\"']([^\"']+)[\"']", re.I)
 
 
@@ -39,16 +29,9 @@ def extract_videos(
         include_iframes=include_iframes,
         include_links=include_links,
     )
-    niconico_ids = unique(
-        video_id
-        for url in video_urls
-        for video_id in NICONICO_ID_PATTERN.findall(url)
-    )
-    youtube_ids = unique(
-        video_id
-        for url in video_urls
-        for video_id in YOUTUBE_ID_PATTERN.findall(url)
-    )
+    parsed = [video_id_from_url(url) for url in video_urls]
+    niconico_ids = unique(video_id for service, video_id in parsed if service == "niconico")
+    youtube_ids = unique(video_id for service, video_id in parsed if service == "youtube")
     return {
         "niconico": video_entries(
             niconico_ids,
@@ -59,6 +42,31 @@ def extract_videos(
             youtube_video_entry,
         ),
     }
+
+
+def video_id_from_url(url: str) -> tuple[str, str]:
+    try:
+        parsed = urllib.parse.urlsplit(url)
+        host = parsed.hostname
+    except ValueError:
+        return "", ""
+    if parsed.scheme not in {"http", "https", ""} or parsed.username:
+        return "", ""
+    if host in {"nicovideo.jp", "www.nicovideo.jp", "ext.nicovideo.jp"}:
+        match = re.fullmatch(r"/(?:watch|thumb)/((?:sm|nm|so)?[0-9]+)", parsed.path)
+        if match:
+            return "niconico", match[1]
+    video_id = ""
+    if host in {"youtube.com", "www.youtube.com", "m.youtube.com"}:
+        if parsed.path == "/watch":
+            video_id = urllib.parse.parse_qs(parsed.query).get("v", [""])[0]
+        elif parsed.path.startswith("/embed/"):
+            video_id = parsed.path.removeprefix("/embed/")
+    elif host == "youtu.be":
+        video_id = parsed.path.removeprefix("/")
+    if re.fullmatch(r"[A-Za-z0-9_-]{11}", video_id):
+        return "youtube", video_id
+    return "", ""
 
 
 def video_entries(

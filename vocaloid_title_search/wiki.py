@@ -7,7 +7,7 @@ import re
 import unicodedata
 import urllib.error
 import urllib.parse
-from html.parser import HTMLParser
+from bs4 import BeautifulSoup
 from typing import Callable
 
 from vocaloid_title_search.models import PopularityInfo, RawSong, is_song_entry
@@ -26,76 +26,90 @@ POPULARITY_TAGS = [
     ("YouTubeミリオン達成曲", 750),
     ("殿堂入り", 100),
 ]
-class TagResultParser(HTMLParser):
-    """Extract song page titles from the tag-search result area."""
-
-    def __init__(self) -> None:
-        super().__init__(convert_charrefs=True)
-        self.in_results = False
-        self.in_link = False
-        self.current_href = ""
-        self.current_text: list[str] = []
-        self.songs: list[RawSong] = []
-
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if not self.in_results or tag != "a":
-            return
-
-        href = dict(attrs).get("href") or ""
-        if re.search(r"/hmiku/pages/\d+\.html$", href):
-            self.in_link = True
-            self.current_href = href
-            self.current_text = []
-
-    def handle_endtag(self, tag: str) -> None:
-        if tag != "a" or not self.in_link:
-            return
-
-        title = normalize_title("".join(self.current_text))
-        if title:
-            self.songs.append(
-                RawSong(title, urllib.parse.urljoin(SITE_ROOT_URL, self.current_href))
-            )
-        self.in_link = False
-        self.current_href = ""
-        self.current_text = []
-
-    def handle_data(self, data: str) -> None:
-        text = data.strip()
-        if "タグ検索" in text:
-            self.in_results = True
-            return
-        if self.in_results and ("関連タグ" in text or "人気のタグ" in text):
-            self.in_results = False
-            return
-        if self.in_link:
-            self.current_text.append(data)
-
-
 class WikiClient:
     def __init__(self, timeout: float) -> None:
         self.timeout = timeout
 
     def fetch_songs(self, source_url: str, pages: int) -> list[RawSong]:
         first_html = self.fetch_html(page_url(source_url, 1))
-        last_page = find_last_page(first_html) if pages == 0 else pages
+        first_entries, first_current, source_last = validated_tag_page(first_html)
+        last_page = source_last if pages == 0 else min(pages, source_last)
+        expected_page_size = len(first_entries)
 
         songs: list[RawSong] = []
         seen: set[str] = set()
+        seen_urls: set[str] = set()
         for page_number in range(1, last_page + 1):
             page_html = (
                 first_html
                 if page_number == 1
                 else self.fetch_html(page_url(source_url, page_number))
             )
-            for song in extract_songs(page_html):
-                if is_song_entry(song.raw_title) and song.raw_title not in seen:
+            entries, current, declared_last = (first_entries, first_current, source_last) if page_number == 1 else validated_tag_page(page_html)
+            if current != page_number or declared_last != source_last:
+                raise urllib.error.URLError(f"pagination changed on tag page {page_number}")
+            if len(entries) > expected_page_size or (page_number < source_last and len(entries) != expected_page_size):
+                raise urllib.error.URLError(f"partial tag page {page_number}: unexpected entry count")
+            page_songs = [song for song in entries if is_song_entry(song.raw_title)]
+            if not page_songs:
+                raise urllib.error.URLError(f"no song entries on tag page {page_number}; source may be unavailable or its markup changed")
+            page_urls = [song.url for song in page_songs]
+            if len(set(page_urls)) != len(page_urls) or seen_urls.intersection(page_urls):
+                raise urllib.error.URLError(
+                    f"duplicate song entries on tag page {page_number}; pagination may have shifted or repeated"
+                )
+            seen_urls.update(page_urls)
+            for song in page_songs:
+                if song.raw_title not in seen:
                     seen.add(song.raw_title)
                     songs.append(song)
         return songs
 
     def fetch_html(self, url: str) -> str:
         return fetch_text(url, timeout=self.timeout, user_agent=USER_AGENT)
+
+
+def validated_tag_page(page_html: str) -> tuple[list[RawSong], int, int]:
+    soup = BeautifulSoup(page_html, "html.parser")
+    containers = soup.select(".cmd_tag")
+    if len(containers) != 1:
+        raise urllib.error.URLError("no song entries: tag result container missing or ambiguous")
+    container = containers[0]
+    lists = container.select("ul.atwiki-page-list")
+    if len(lists) != 1:
+        raise urllib.error.URLError("no song entries: result list missing or ambiguous")
+    songs = []
+    for row in lists[0].find_all("li", recursive=False):
+        links = row.find_all("a", href=True)
+        if len(links) != 1:
+            raise urllib.error.URLError("malformed tag entry")
+        link = links[0]
+        url = urllib.parse.urljoin(SITE_ROOT_URL, link["href"])
+        parsed = urllib.parse.urlsplit(url)
+        title = normalize_title(link.get_text())
+        if parsed.scheme != "https" or parsed.netloc != "w.atwiki.jp" or parsed.query or parsed.fragment or not re.fullmatch(r"/hmiku/pages/\d+\.html", parsed.path) or not title:
+            raise urllib.error.URLError("malformed tag entry")
+        songs.append(RawSong(title, url))
+    pagination = []
+    for navigation in container.select(".atwiki-pagination-wrap"):
+        current = [int(span.get_text(strip=True)[1:-1]) for span in navigation.find_all("span")
+                   if re.fullmatch(r"\[\d+\]", span.get_text(strip=True))]
+        if len(current) != 1 or current[0] < 1:
+            raise urllib.error.URLError("invalid current tag page")
+        numbers = current[:]
+        for link in navigation.find_all("a", href=True):
+            target = urllib.parse.urlsplit(link["href"])
+            if target.netloc not in {"", "w.atwiki.jp"} or (target.path and not target.path.startswith("/hmiku/tag/")):
+                raise urllib.error.URLError("invalid tag pagination target")
+            value = urllib.parse.parse_qs(target.query).get("p", [])
+            if len(value) != 1 or not value[0].isdigit() or int(value[0]) < 1:
+                raise urllib.error.URLError("invalid tag pagination link")
+            numbers.append(int(value[0]))
+        pagination.append((current[0], max(numbers)))
+    if len(set(pagination)) > 1:
+        raise urllib.error.URLError("inconsistent tag pagination")
+    current, last = pagination[0] if pagination else (1, 1)
+    return songs, current, last
 
 
 def normalize_title(raw_title: str) -> str:
@@ -115,14 +129,11 @@ def page_url(base_url: str, page_number: int) -> str:
 
 
 def find_last_page(first_page_html: str) -> int:
-    page_numbers = [int(value) for value in re.findall(r"[?&]p=(\d+)", first_page_html)]
-    return max(page_numbers, default=1)
+    return validated_tag_page(first_page_html)[2]
 
 
 def extract_songs(page_html: str) -> list[RawSong]:
-    parser = TagResultParser()
-    parser.feed(page_html)
-    return parser.songs
+    return validated_tag_page(page_html)[0]
 
 
 def tag_url(tag_name: str) -> str:
@@ -141,8 +152,8 @@ def fetch_popularity(
             progress(f"人気度タグ取得中: {label}")
         try:
             songs = client.fetch_songs(tag_url(label), pages=0)
-        except (urllib.error.URLError, TimeoutError, OSError):
-            continue
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            raise urllib.error.URLError(f"popularity tag fetch failed: {label}: {exc}") from exc
         for order, song in enumerate(songs, start=1):
             if song.raw_title not in seen_songs:
                 seen_songs.add(song.raw_title)

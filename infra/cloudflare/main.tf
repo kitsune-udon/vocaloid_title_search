@@ -73,13 +73,13 @@ resource "cloudflare_d1_database" "production" {
 
 resource "cloudflare_workers_route" "api" {
   for_each = var.manage_worker_routes ? {
-    staging_api        = { hostname = var.staging_hostname, pattern = "/api/*", script = var.worker_script_names.staging }
-    staging_health     = { hostname = var.staging_hostname, pattern = "/health", script = var.worker_script_names.staging }
-    production_api     = { hostname = var.production_hostname, pattern = "/api/*", script = var.worker_script_names.production }
-    production_health  = { hostname = var.production_hostname, pattern = "/health", script = var.worker_script_names.production }
+    staging_api       = { hostname = var.staging_hostname, pattern = "/api/*", script = var.worker_script_names.staging }
+    staging_health    = { hostname = var.staging_hostname, pattern = "/health", script = var.worker_script_names.staging }
+    production_api    = { hostname = var.production_hostname, pattern = "/api/*", script = var.worker_script_names.production }
+    production_health = { hostname = var.production_hostname, pattern = "/health", script = var.worker_script_names.production }
   } : {}
 
-  zone_id     = var.zone_id
-  pattern     = "${each.value.hostname}${each.value.pattern}"
-  script      = each.value.script
+  zone_id = var.zone_id
+  pattern = "${each.value.hostname}${each.value.pattern}"
+  script  = each.value.script
 }

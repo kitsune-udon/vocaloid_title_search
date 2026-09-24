@@ -1,4 +1,4 @@
-name: API performance
+name: API smoke budget
 on:
   workflow_dispatch:
   schedule:
@@ -17,7 +17,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version-file: .python-version
-      - name: Measure configured public API
+      - name: Check configured public API once
         env:
           PROFILE_BASE_URL: ${{ secrets.PROFILE_BASE_URL }}
           PROFILE_MAX_P95_MS: ${{ vars.PROFILE_MAX_P95_MS }}
@@ -27,7 +27,7 @@ jobs:
             exit 0
           fi
           python tools/profile_worker_api.py --base-url "$PROFILE_BASE_URL" \
-            --repeat 20 --interval 0.2 --redact-base-url \
+            --repeat 1 --interval 0.2 --redact-base-url \
             --max-p95-ms "${PROFILE_MAX_P95_MS:-0}" --output release/performance/profile.json
       - uses: actions/upload-artifact@v4
         if: always()

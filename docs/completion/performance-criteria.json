@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "scope": "Final local comparison on the same reviewed candidate database, pinned runtimes, and machine. Earlier exploratory measurements are not acceptance evidence for these criteria.",
+  "baseline": "Saved pre-redesign Worker and frontend sources in release/redesign-baseline; all files are hashed as declared inputs.",
+  "sql": {
+    "rounds": 31,
+    "max_relative_regression": 0.2,
+    "noise_floor_ms": 1,
+    "max_median_ms": 25,
+    "rationale": "Alternating warm queries isolate SQL cost. A sub-millisecond increase is below useful local timing resolution; larger regressions above 20% require investigation. An absolute bound prevents accepting uniformly slow queries."
+  },
+  "d1": {
+    "max_cold_read_ratio": 1,
+    "max_cached_rows_read": 1,
+    "max_incremental_write_ratio": 0.01,
+    "rationale": "Preserve or reduce billed work for the same responses. An unchanged-detail metadata refresh must write less than 1% of a full publication. Missing metrics are failures."
+  },
+  "frontend": {
+    "rounds": 3,
+    "max_js_gzip_increase_bytes": 2048,
+    "max_js_gzip_bytes": 46080,
+    "max_css_gzip_increase_bytes": 512,
+    "max_css_gzip_bytes": 6144,
+    "max_build_time_ratio": 1.25,
+    "build_time_noise_floor_seconds": 0.5,
+    "max_build_rss_ratio": 1.2,
+    "rss_noise_floor_kib": 32768,
+    "max_build_rss_kib": 786432,
+    "rationale": "Allow a bounded payload cost for retry, accessible controls and explicit error handling: at most 2 KiB extra JS and 512 B CSS. This is about 21 ms at 1 Mbps before latency and decompression. Three alternating builds compare local build time and peak RSS, allowing fixed measurement noise while bounding absolute memory. These are local build budgets, not browser heap or production latency guarantees."
+  }
+}

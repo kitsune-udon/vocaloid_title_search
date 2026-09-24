@@ -423,7 +423,8 @@ Worker logsで見る代表的な兆候:
 
 | ログや症状 | 主な原因 | 次の確認 |
 | --- | --- | --- |
-| `{"event":"api_timing",...}` | APIごとの処理時間ログ | 遅いpathを `tools/profile_worker_api.py` で再計測 |
+| `{"event":"api_timing",...}` | APIごとの処理時間ログ | rows_readと遅いpathを確認し、反復測定はlocal D1で実施 |
+| `database_readiness_error` | D1の読み取り失敗、公開レコードの解析失敗 | D1 Metricsとログのerrorを確認 |
 | `database is not ready` | metadata不足、schema不一致、詳細件数不足 | `/health`, D1 metadata |
 | `no such table` | D1投入先間違い、SQL投入失敗 | D1 database name、`tools/update_d1.sh --dry-run` |
 | `page_size must be one of 50, 100, 200` | フロントまたは手動リクエストのquery不正 | `web-api.md` のvalidation |
@@ -436,7 +437,7 @@ Pages は Cloudflare Dashboard の Pages deployments から以前のデプロイ
 
 `tools/update_d1.sh` は投入直前のリモートD1をexportし、SQLiteへの読み込みと整合性検査を通した `rollback.sql` を作成します。バックアップ取得・検査に失敗した場合は投入しません。復旧対象はアプリの4テーブルです。4テーブルがすべて未作成の初期DBは投入可能で、rollbackは作成した4テーブルを削除して初期状態に戻します。一部だけ欠けたDBは停止します。
 
-`release/backups/<env>/<timestamp>-<suffix>/` には `remote-before.sql`、`rollback.sql`、今回投入する `new-vocaloid_titles.sqlite3` と `new-vocaloid_titles.sql` が残ります。前回ローカル生成SQLをリモートの現状とみなさず、実際の投入先から復旧用データを保存します。exportにはD1の読み取り権限も必要です。同一checkoutでは、DB名に対応する `flock` が並行更新を拒否します。別checkout・別ホストからの更新までは排他しないため、更新担当を一本化します。
+`release/backups/<env>/<timestamp>-<suffix>/` には `remote-before.sql`、`rollback.sql`、今回投入する `new-vocaloid_titles.sqlite3` と `new-vocaloid_titles.sql` が残ります。前回ローカル生成SQLをリモートの現状とみなさず、実際の投入先から復旧用データを保存します。exportにはD1の読み取り権限も必要です。同一checkoutでは、DB名に対応する `flock` が並行更新を拒否します。別checkout・別ホスト間はD1内の `_vts_update_lock` で排他します。バックアップ取得前に所有者UUIDを確保し、公開API確認が成功した後にだけ解除します。取得競合は更新開始前に失敗します。
 
 smoke test が失敗した場合は `rollback.sql` を同じD1へ再投入するコマンドを表示します。途中の通信エラーでは現在の状態を確認してから復旧します。SQL生成は一時ファイルから原子的に差し替えるため、生成失敗で前回SQLを切り詰めません。
 
@@ -477,3 +478,63 @@ rollback後の確認:
 3. Pages画面だけが壊れているのか、Worker APIも壊れているのかを分ける
 4. 直前に実行した操作が deploy、D1投入、Terraform apply のどれかを確認する
 5. Worker logs、Pages deployment、D1 metrics の順に確認する
+
+
+## Publication Format Migration
+
+公開形式version 1を要求するWorkerは、公開レコードがない旧D1を未準備として扱います。Workerだけを先行deployしません。初回移行は次の順で行います。
+
+1. `uv run --cache-dir .uv-cache python -m vocaloid_title_search.cli.build_db --with-video-metadata` で動画情報を含むローカルDBを構築し、品質ゲートを通します。既存の検証済み候補を使う場合も両サービスの取得記録が必要です。
+2. `tools/update_d1.sh --env staging --dry-run` で対象を確認し、同じコマンドから `--dry-run` を外してstaging D1へ投入します。新SQLは末尾に公開レコードを追加します。旧Workerは通常のmetadataを引き続き読めます。
+3. `tools/deploy_cloudflare.sh --env staging` でWorkerをdeployし、smokeと検索・統計・詳細の画面確認を行います。
+4. production操作の承認範囲と対象を確認し、productionでもD1投入→Worker deploy→smokeの順で実行します。共用DBの場合はstaging投入がproductionへ及ぶため、先にbindingと対象DBを確認します。
+5. `api_timing` のrows_read、`/health`、代表検索を確認します。公開先のprofilerは各1回に留めます。
+
+公開形式導入前のDBへrollbackする場合は、DBの復旧と対応する旧Workerへの復旧を一組で扱います。旧SQLに公開レコードがないため、新Workerのままでは503になります。公開レコードだけの手書き追加や、全件検査を回避してreadyにする操作は行いません。
+
+D1を直接編集すると公開レコードの統計・revisionと実データがずれます。データ変更は検証済みSQLによる公開手順で行います。投入全体はatomic swapではないため、更新中は一時的な未準備を許容します。日次枠などのD1エラー時には繰り返し再投入せず、D1 MetricsとWorker logsを確認します。
+
+
+### Incremental Video Metadata Release
+
+動画情報の更新と公開形式移行だけの場合は `tools/update_d1.sh --env staging --incremental` を使えます。productionも同じオプションに対応します。曲一覧・作曲者・詳細のURL集合や列構造が変わる場合は停止し、自動で全件投入へ切り替えません。
+
+品質検査済み候補と直前D1のバックアップから、動画JSON・詳細取得日時・metadata・索引の差分だけを生成します。投入後の全行・索引が全件SQLと一致すること、差分rollbackで旧状態に完全復旧できることをローカルで確認します。公開レコードは最初に無効化し、最後に書きます。このスクリプトを使う別ホストの更新もD1所有者ロックで拒否します。Wranglerや管理画面からの直接更新はこの排他を通らないため、実行中に行わないでください。
+
+一意なbackupディレクトリの `new-vocaloid_titles.sql` と `rollback.sql` が差分SQLです。元の全件SQLは `.full.sql`、投入内容のhashと方式はmanifestへ保存します。復旧は対象backup内の `rollback.sql` を使います。全件再作成を避けても読み書きは発生するため、投入ログの行数を確認します。
+
+## Local Update And Release Consistency
+
+`build_db` と `refresh_video_metadata` は同じDBのlockを取得してから読み取り・取得・保存を行います。同時実行は失敗するため、実行中の処理の完了を確認してから再実行します。動画補完はJSONが変わった詳細行だけを書き換え、各サービスの取得結果・取得時刻は毎回metadataへ保存します。
+
+公開リハーサルは、生成SQLを適用した全行・列・索引と固定snapshotを照合し、公開レコードの統計・metadataも再計算値と照合します。その後にrollback SQLを適用し、旧DBとの一致を検証します。通常投入・差分投入の両方に適用され、`forward_verified` と `rollback_verified` の両方、および成果物hashの一致が投入条件です。公開前に失敗した場合は生成物を手修正せず、エラーを直して新しいreleaseディレクトリで準備し直します。
+
+人気度タグの取得が失敗した場合はDB構築を中止し、旧DBを保持します。一部タグを欠いた人気度情報で置換しません。HTTP 429等だけでなく接続切断・タイムアウトも指定上限まで再試行し、HTTPS redirectは10回を上限にします。失敗後はネットワーク状態を確認して通常の構築を再実行してください。
+
+差分SQLの索引変更は、投入途中のどの文で中断してもrollbackを適用できるよう、存在を確認して削除してから必要な索引を作成します。公開revisionの再生成後は検証済みフラグを解除し、順方向・復旧のリハーサルを要求します。再開用DBや再利用対象の詳細も型を検査し、不正な保存内容を成功済みとして扱いません。
+
+
+タグページはHTTP応答が成功でも、曲リンクを1件も抽出できなければ構築を中止します。先頭ページだけでなくページ送り先も検査し、メンテナンス画面やマークアップ変更を空の曲一覧として保存しません。失敗時は対象ページの応答と抽出仕様を確認してから再実行してください。意図的に空になったタグにも同じ判定が適用されるため、根拠タグの構成を変更する場合は取得対象の定義を見直します。
+
+`--resume` の最終差し替えでは、チェックポイントを保持したまま公開用の一時コピーを作り、再開情報を除去してから差し替えます。差し替え失敗時は旧DBとチェックポイントを保持するため、権限や空き容量を解消して同じコマンドで再開できます。この最終処理では候補DB1個分の追加ディスク容量が必要です。成功後にチェックポイントを削除します。
+
+
+再開の互換性には詳細抽出だけでなく曲一覧取得・タイトル正規化のfingerprintも含めます。これらが変わった場合は旧チェックポイントを保持して再開を拒否します。エラーを確認し、チェックポイントを別名で退避してから構築し直してください。旧実装が生成した部分的な曲一覧を新実装の検証済み一覧として引き継がないためです。
+
+### Video Metadata Diagnostics
+
+動画補完のログに出る `取得診断` は、サービス別に失敗理由と動画IDをまとめたJSONです。`provider_DELETED`・`provider_NOT_FOUND` はニコニコの応答コード、`http_429` 等はHTTP応答、`transport_error` は通信例外、`invalid_response` は解析できない応答を示します。応答本文や認証情報は記録せず、この診断項目は公開用動画JSONへ保存しません。品質ゲートの失敗時はこのログと取得成功率・保持件数を照合し、原因が不明なまま基準を緩和しないでください。過去のログに診断がない場合、再取得で回復しても初回障害の原因は断定できません。
+
+### Recovering A Remote Update Lock
+
+`update_d1.sh` はD1内の `_vts_update_lock` を使い、所有者UUIDをバックアップディレクトリの `remote-lock-owner.txt` に保存します。ロックには自動期限切れがありません。長時間の投入中に別更新が始まることを避け、プロセス中断・投入失敗・smoke失敗・smoke省略・通信結果不明の場合はロックを保持します。曲データの公開SQLとrollback SQLは、この運用専用テーブルを削除しません。
+
+解除前に、元の更新プロセスが停止していること、投入先の状態、必要なrollbackの完了、公開APIの正常応答を確認します。停止確認ができない状態では解除しません。復旧操作には対象環境への操作承認が必要です。検証済みの所有者についてのみ、次のコマンドで解除できます。
+
+```bash
+python3 tools/d1_update_lock.py release --remote --worker-dir cloudflare/worker --database replace-with-database --owner "$(cat release/backups/staging/RELEASE_ID/remote-lock-owner.txt)"
+```
+
+別所有者のロックは解除できず、既に解除済みなど所有者を確認できない場合も非ゼロ終了します。通信に失敗した場合は、再実行で状態が変わる前にD1のロック行と作業記録を確認してください。ロックは協調的な更新スクリプト間の排他であり、同じ権限を持つ利用者による直接SQL操作を禁止するアクセス制御ではありません。
+
+SQLとコマンドの仕様は [D1 SQL statements](https://developers.cloudflare.com/d1/sql-api/sql-statements/) を参照しています。ローカル互換環境での競合検証は `node tools/check_d1_update_lock.mjs`、更新スクリプトの取得・保持・解除の回帰は `python3 -m unittest tests.test_update_d1_script` です。

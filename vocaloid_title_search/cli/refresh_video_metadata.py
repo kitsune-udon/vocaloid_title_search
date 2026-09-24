@@ -16,8 +16,8 @@ from vocaloid_title_search.cli.common import (
 from vocaloid_title_search.database import DEFAULT_DB_PATH
 from vocaloid_title_search.video_metadata import refresh_stored_video_metadata
 
-DEFAULT_VIDEO_METADATA_WORKERS = 32
-DEFAULT_VIDEO_METADATA_REQUEST_INTERVAL = 0.0
+DEFAULT_VIDEO_METADATA_WORKERS = 8
+DEFAULT_VIDEO_METADATA_REQUEST_INTERVAL = 0.02
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:

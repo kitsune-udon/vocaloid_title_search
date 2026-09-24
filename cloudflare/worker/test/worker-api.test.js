@@ -31,9 +31,9 @@ describe("Worker API", () => {
     assert.deepEqual(await response.json(), { ok: true, database_ready: true });
   });
 
-  it("returns database not ready for metadata when details are incomplete", async () => {
+  it("returns database not ready while the publication marker is absent", async () => {
     const fixture = fixtureData();
-    fixture.details.pop();
+    fixture.publication = null;
     const response = await request("/api/metadata", env(fixture));
 
     assert.equal(response.status, 503);
@@ -52,7 +52,7 @@ describe("Worker API", () => {
     assert.deepEqual(await metadataResponse.json(), { detail: "database is not ready" });
   });
 
-  it("reports database not ready when metadata counts do not match tables", async () => {
+  it("reports database not ready when publication totals are inconsistent", async () => {
     const fixture = fixtureData();
     fixture.metadata.song_count = "999";
     const response = await request("/health", env(fixture));
@@ -174,13 +174,13 @@ describe("Worker API", () => {
     );
   });
 
-  it("uses readiness metadata counts for statistics totals", async () => {
+  it("loads precomputed statistics without scanning song tables", async () => {
     const testEnv = env();
     const response = await request("/api/stats", testEnv);
 
     assert.equal(response.status, 200);
-    assert.equal(countPreparedQueries(testEnv.DB, "SELECT COUNT(*) AS count FROM songs"), 1);
-    assert.equal(countPreparedQueries(testEnv.DB, "SELECT COUNT(*) AS count FROM song_details"), 1);
+    assert.equal(countPreparedQueries(testEnv.DB, "SELECT COUNT(*) AS count FROM songs"), 0);
+    assert.equal(countPreparedQueries(testEnv.DB, "SELECT COUNT(*) AS count FROM song_details"), 0);
   });
 
   it("returns not found for unknown routes", async () => {
@@ -206,7 +206,92 @@ describe("Worker API", () => {
     assert.equal(timing.method, "GET");
     assert.equal(timing.status, 200);
     assert.equal(typeof timing.duration_ms, "number");
+    assert.equal(timing.d1_queries, 3);
+    assert.equal(timing.rows_read, 3);
   });
+});
+
+function publication(data) {
+  return {
+    version: 1, revision: crypto.randomUUID().replaceAll("-", ""), metadata: { ...data.metadata },
+    statistics: {
+      total_songs: data.songs.length, detail_count: data.details.length,
+      with_composer: new Set(data.people.map(row => row.song_url)).size,
+      with_published_year: data.details.filter(row => row.published_year != null).length,
+      by_title_length: groupCount(data.songs, "title_length", "length").sort((a, b) => a.length - b.length),
+      by_published_year: groupCount(data.details, "published_year", "year").sort((a, b) => a.year - b.year),
+      by_popularity_label: popularityLabels(data).map(row => ({ label: row.popularity_label,
+        count: data.songs.filter(song => song.popularity_label === row.popularity_label).length })),
+      top_composers: topComposers(data),
+    },
+  };
+}
+
+it("normalizes cache keys, preserves CORS and reads only the publication on hits", async () => {
+  const testEnv = env();
+  const first = await request("/api/search?composer=ＲＹＯ&popularity_label=テンミリオン達成曲", testEnv);
+  const second = await request("/api/search?page=1&composer=ryo&popularity_label=テンミリオン達成曲&popularity_label=テンミリオン達成曲", testEnv,
+    { headers: { origin: "http://127.0.0.1:5173" } });
+  assert.equal(first.headers.get("x-search-cache"), "miss");
+  assert.equal(second.headers.get("x-search-cache"), "hit");
+  assert.equal(second.headers.get("x-d1-queries"), "1");
+  assert.equal(second.headers.get("x-d1-rows-read"), "1");
+  assert.equal(second.headers.get("access-control-allow-origin"), "http://127.0.0.1:5173");
+  assert.equal(await first.text(), await second.text());
+  assert.equal((await request("/api/search?composer=ryo&page=2", testEnv)).headers.get("x-search-cache"), "miss");
+});
+
+it("does not serve cached searches during import and invalidates on revision changes", async () => {
+  const testEnv = env();
+  await request("/api/search", testEnv);
+  testEnv.DB.data.publication = null;
+  assert.equal((await request("/api/search", testEnv)).status, 503);
+  testEnv.DB.data.songs[0].title = "更新曲";
+  testEnv.DB.data.publication = publication(testEnv.DB.data);
+  const response = await request("/api/search", testEnv);
+  assert.equal(response.headers.get("x-search-cache"), "miss");
+  assert.equal((await response.json()).results[0].title, "更新曲");
+});
+
+it("expires searches after 60 seconds", async () => {
+  const testEnv = env();
+  const originalNow = Date.now;
+  let now = originalNow();
+  Date.now = () => now;
+  try {
+    await request("/api/search", testEnv);
+    now += 60_001;
+    assert.equal((await request("/api/search", testEnv)).headers.get("x-search-cache"), "miss");
+  } finally { Date.now = originalNow; }
+});
+
+it("rejects queries spanning publication changes without caching the error", async () => {
+  const testEnv = env();
+  const batch = testEnv.DB.batch.bind(testEnv.DB);
+  testEnv.DB.batch = async (statements) => {
+    const results = await batch(statements);
+    testEnv.DB.data.publication = publication(testEnv.DB.data);
+    return results;
+  };
+  assert.equal((await request("/api/search", testEnv)).status, 503);
+  testEnv.DB.batch = batch;
+  const response = await request("/api/search", testEnv);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("x-search-cache"), "miss");
+});
+
+it("bounds the cache entry count", async () => {
+  const testEnv = env();
+  for (let page = 1; page <= 130; page++) await request(`/api/search?page=${page}`, testEnv);
+  assert.equal((await request("/api/search?page=1", testEnv)).headers.get("x-search-cache"), "miss");
+});
+
+it("does not report missing D1 metrics as zero", async () => {
+  const testEnv = env();
+  const batch = testEnv.DB.batch.bind(testEnv.DB);
+  testEnv.DB.batch = async statements => (await batch(statements)).map(({ results }) => ({ results }));
+  const response = await request("/api/search", testEnv);
+  assert.equal(response.headers.get("x-d1-rows-read"), null);
 });
 
 async function jsonRequest(path, testEnv = env()) {
@@ -310,6 +395,7 @@ function person(url, role, name) {
 class FakeD1Database {
   constructor(data) {
     this.data = data;
+    if (data.publication === undefined) data.publication = publication(data);
     this.queries = [];
   }
 
@@ -348,6 +434,9 @@ class FakeD1PreparedStatement {
     const query = compactSql(this.query);
     const data = this.db.data;
 
+    if (query === "SELECT value FROM metadata WHERE key = 'api_publication_v1'") {
+      return rows(data.publication ? [{ value: JSON.stringify(data.publication) }] : []);
+    }
     if (query === "SELECT key, value FROM metadata") {
       return rows(Object.entries(data.metadata).map(([key, value]) => ({ key, value })));
     }
@@ -399,7 +488,7 @@ class FakeD1PreparedStatement {
 }
 
 function rows(results) {
-  return { results };
+  return { results, meta: { rows_read: results.length } };
 }
 
 function compactSql(sql) {

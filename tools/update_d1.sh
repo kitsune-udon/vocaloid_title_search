@@ -14,12 +14,14 @@ WORKER_DIR="${VOCALOID_WORKER_DIR:-$ROOT_DIR/cloudflare/worker}"
 NODE_VERSION="$(project_node_version "$ROOT_DIR")"
 TARGET_ENV="${VOCALOID_DEPLOY_ENV:-}"
 ENV_FILE="${VOCALOID_ENV_FILE:-$ROOT_DIR/.env}"
+INCREMENTAL=0
 DRY_RUN=0
 ASSUME_YES=0
 SKIP_SMOKE_CHECKS=0
 SKIP_SMOKE_CHECKS_EXPLICIT=0
 BACKUP_PATH=""
 ROLLBACK_SQL=""
+REMOTE_LOCK_OWNER=""
 
 usage() {
   cat <<'USAGE'
@@ -35,6 +37,7 @@ Options:
   --database NAME            D1 database name. Default: vocaloid-title-search-staging or vocaloid-title-search-prod
   --backup-dir PATH          Backup directory. Default: release/backups/<env>
   --skip-smoke-checks        Do not run post-update public API checks.
+  --incremental              Update video metadata, publication record and indexes only.
   --dry-run                  Print commands without changing DB or D1.
   --yes                      Do not prompt before remote D1 update.
   -h, --help                 Show this help.
@@ -171,6 +174,10 @@ while [[ $# -gt 0 ]]; do
       SKIP_SMOKE_CHECKS_EXPLICIT=1
       shift
       ;;
+    --incremental)
+      INCREMENTAL=1
+      shift
+      ;;
     --dry-run)
       DRY_RUN=1
       shift
@@ -297,6 +304,10 @@ record_release_status() {
     printf 'D1 import failed. Restore the verified snapshot with:\n' >&2
     printf '  cd %q && ./node_modules/.bin/wrangler d1 execute %q --remote --file %q\n' "$WORKER_DIR" "$D1_DATABASE" "$ROLLBACK_SQL" >&2
   fi
+  if [[ "$DRY_RUN" -eq 0 && -n "$REMOTE_LOCK_OWNER" ]]; then
+    printf 'Remote update lock may remain owned by %s. Inspect the update before explicit release.\n' "$REMOTE_LOCK_OWNER" >&2
+    printf 'Owner record: %s/remote-lock-owner.txt\n' "$BACKUP_PATH" >&2
+  fi
   return "$result"
 }
 trap record_release_status EXIT
@@ -313,6 +324,7 @@ if [[ "$DRY_RUN" -eq 0 ]]; then
   cp -p "$BACKUP_PATH/new-vocaloid_titles.sql" "$SQL_OUTPUT"
 fi
 # Always import the unique, validated artifact, never the shared convenience copy.
+REFERENCE_SQL_OUTPUT="$SQL_OUTPUT"
 SQL_OUTPUT="$BACKUP_PATH/new-vocaloid_titles.sql"
 
 if [[ "$ASSUME_YES" -eq 0 && "$DRY_RUN" -eq 0 ]]; then
@@ -331,6 +343,15 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
   BACKUP_PATH="$BACKUP_DIR/dry-run"
 fi
 ROLLBACK_SQL="$BACKUP_PATH/rollback.sql"
+log "Acquiring remote D1 update ownership"
+if [[ "$DRY_RUN" -eq 0 ]]; then
+  REMOTE_LOCK_OWNER="$(python3 -c 'import uuid; print(uuid.uuid4())')"
+  printf '%s\n' "$REMOTE_LOCK_OWNER" > "$BACKUP_PATH/remote-lock-owner.txt"
+else
+  REMOTE_LOCK_OWNER="00000000-0000-4000-8000-000000000000"
+fi
+run env NODENV_VERSION="$NODE_VERSION" python3 "$ROOT_DIR/tools/d1_update_lock.py" acquire --remote \
+  --worker-dir "$WORKER_DIR" --database "$D1_DATABASE" --owner "$REMOTE_LOCK_OWNER"
 log "Exporting current remote D1 before replacement"
 run_in_worker_dir env NODENV_VERSION="$NODE_VERSION" ./node_modules/.bin/wrangler d1 export "$D1_DATABASE" \
   --remote --skip-confirmation \
@@ -338,6 +359,13 @@ run_in_worker_dir env NODENV_VERSION="$NODE_VERSION" ./node_modules/.bin/wrangle
 run python3 "$ROOT_DIR/tools/export_d1_sql.py" \
   --from-sql "$BACKUP_PATH/remote-before.sql" --output "$ROLLBACK_SQL"
 
+if [[ "$INCREMENTAL" -eq 1 ]]; then
+  log "Preparing verified incremental metadata update"
+  run python3 "$ROOT_DIR/tools/release_artifacts.py" incremental --directory "$BACKUP_PATH"
+  if [[ "$DRY_RUN" -eq 0 ]]; then
+    cp -p "$SQL_OUTPUT" "$REFERENCE_SQL_OUTPUT"
+  fi
+fi
 log "Rehearsing rollback and comparing the remote baseline"
 run python3 "$ROOT_DIR/tools/release_artifacts.py" rehearse --directory "$BACKUP_PATH"
 run python3 "$ROOT_DIR/tools/release_artifacts.py" verify --directory "$BACKUP_PATH"
@@ -373,6 +401,9 @@ fi
 if [[ "$SKIP_SMOKE_CHECKS" -eq 1 ]]; then
   RELEASE_STATUS="loaded_unverified"
 else
+  run env NODENV_VERSION="$NODE_VERSION" python3 "$ROOT_DIR/tools/d1_update_lock.py" release --remote \
+    --worker-dir "$WORKER_DIR" --database "$D1_DATABASE" --owner "$REMOTE_LOCK_OWNER"
+  REMOTE_LOCK_OWNER=""
   RELEASE_STATUS="verified"
 fi
 log "Release manifest: $BACKUP_PATH/manifest.json"

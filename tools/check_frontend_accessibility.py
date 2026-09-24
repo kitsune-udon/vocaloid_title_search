@@ -12,7 +12,7 @@ STYLE_CSS = ROOT / "frontend" / "src" / "style.css"
 
 
 def main() -> int:
-    app = APP_VUE.read_text(encoding="utf-8")
+    app = "\n".join(path.read_text(encoding="utf-8") for path in sorted(APP_VUE.parent.rglob("*.vue")))
     style = STYLE_CSS.read_text(encoding="utf-8")
     failures = [
         message

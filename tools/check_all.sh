@@ -49,6 +49,8 @@ run python3 -m py_compile \
   "$ROOT_DIR/tools/profile_worker_api.py"
 run env PYTHONDONTWRITEBYTECODE=1 uv run --cache-dir "$ROOT_DIR/.uv-cache" python -m unittest
 
+run python3 "$ROOT_DIR/tools/generate_credit_normalization.py" --check
+
 section "Cloudflare Worker API"
 run_in "$ROOT_DIR/cloudflare/worker" env NODENV_VERSION="$NODE_VERSION" yarn typecheck
 run_in "$ROOT_DIR/cloudflare/worker" env NODENV_VERSION="$NODE_VERSION" yarn test

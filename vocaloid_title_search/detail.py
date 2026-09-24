@@ -4,7 +4,7 @@ import re
 import urllib.parse
 from dataclasses import asdict, dataclass, field
 
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Comment, NavigableString
 
 from vocaloid_title_search.detail_text import (
     clean_soup,
@@ -41,6 +41,7 @@ CREDIT_LABELS = {
     "作曲": "composer",
     "編曲": "arranger",
     "唄": "vocalist",
+    "歌": "vocalist",
     "絵": "illustrator",
     "イラスト": "illustrator",
     "Illust": "illustrator",
@@ -63,6 +64,10 @@ CREDIT_LABELS = {
     "movie": "video",
     "調声": "tuning",
 }
+# Unlinked names whose punctuation is ambiguous. Values identify the independently
+# reviewed wiki page with a single matching name link; do not infer from spelling.
+COMPOUND_CREDIT_NAMES = {"タケ・ヨシキ": "3581"}
+INTRODUCTION_HEADINGS = ("曲紹介", "概要", "曲の内容")
 SECTION_END_MARKERS = {"歌詞", "関連動画", "コメント"}
 SUBSECTION_MARKER_LINE = "+"
 DISCARDED_CREDIT_VALUES = {
@@ -84,6 +89,8 @@ LINK_NOTE_LABELS = {
     "web",
     "website",
     "公式サイト",
+    "個人サイト",
+    "公式hp",
     "youtube",
     "ニコニコ動画",
     "ニコニコ",
@@ -105,6 +112,8 @@ COMPACT_LINK_NOTE_TOKENS = (
     "ニコニコ",
     "ホームページ",
     "公式サイト",
+    "個人サイト",
+    "公式hp",
     "site",
     "hp",
     "fanbox",
@@ -203,7 +212,9 @@ def extract_published_year(soup: BeautifulSoup) -> int | None:
 
 def extract_credits(soup: BeautifulSoup) -> dict[str, list[str]]:
     credits: dict[str, list[str]] = {}
-    lines = credit_section_lines(soup)
+    protected_names: dict[str, str] = {}
+    section_groups: set[str] = set()
+    lines = credit_section_lines(soup, protected_names=protected_names, section_groups=section_groups)
     index = 0
     while index < len(lines):
         if line_starts_alternate_version_subsection(lines, index):
@@ -226,7 +237,7 @@ def extract_credits(soup: BeautifulSoup) -> dict[str, list[str]]:
         index += 1
         while index < len(lines):
             line = lines[index]
-            if line in SECTION_END_MARKERS or line == "曲紹介":
+            if line in SECTION_END_MARKERS or line in INTRODUCTION_HEADINGS or line in section_groups:
                 break
             if line_starts_alternate_version_subsection(lines, index):
                 index = len(lines)
@@ -239,6 +250,13 @@ def extract_credits(soup: BeautifulSoup) -> dict[str, list[str]]:
         clean_values = normalize_credit_values(values)
         if clean_values:
             add_credit_values(credits, field_names, clean_values)
+    for field_name, values in credits.items():
+        restored = []
+        for value in values:
+            for token, name in protected_names.items():
+                value = value.replace(token, name)
+            restored.append(remove_link_notes(value))
+        credits[field_name] = unique(restored)
     return credits
 
 
@@ -259,7 +277,7 @@ def next_useful_line(lines: list[str], start: int) -> str:
 
 def is_alternate_version_heading(line: str) -> bool:
     text = clean_text(line)
-    return bool(re.search(r"(?:Remix|RMX|Reloaded|ver\.|Ver\.|版)$", text))
+    return bool(re.search(r"^Re:|(?:Remix|RMX|Reloaded|ver\.|版|edit)$", text, flags=re.I))
 
 
 def credit_label_and_value(line: str) -> tuple[str, str]:
@@ -267,16 +285,89 @@ def credit_label_and_value(line: str) -> tuple[str, str]:
     if label_text:
         return label_text, value
     text = clean_text(line)
+    natural_label = re.match(r"^(.+?)を\s+(.+)$", text)
+    if natural_label and credit_field_names(natural_label.group(1)):
+        return natural_label.group(1), natural_label.group(2)
     if standalone_credit_field_names(text):
         return text, ""
     return "", ""
 
 
-def credit_section_lines(soup: BeautifulSoup) -> list[str]:
-    lines = useful_lines(soup.get_text("\n"))
-    section_end = find_credit_section_end(lines) or len(lines)
+def credit_section_lines(
+    soup: BeautifulSoup, *, protected_names: dict[str, str] | None = None,
+    section_groups: set[str] | None = None,
+) -> list[str]:
+    # HTML links and emphasis are inline, not person or row boundaries. Keep
+    # structural breaks while protecting punctuation inside a linked name.
+    prefix = "\ue000credit"
+    text = soup.get_text()
+    while prefix in text:
+        prefix += "_"
+    blocks = {"div", "p", "li", "ul", "ol", "table", "tr", "td", "th", "section",
+              "article", "blockquote", "nav", "header", "footer", "h1", "h2", "h3",
+              "h4", "h5", "h6", "dt", "dd", "summary"}
+
+    def render(node):
+        if isinstance(node, Comment):
+            return ""
+        if isinstance(node, NavigableString):
+            value = str(node)
+            if protected_names is not None:
+                for name in COMPOUND_CREDIT_NAMES:
+                    if name in value:
+                        token = f"{prefix}{len(protected_names)}\ue001"
+                        protected_names[token] = name
+                        value = value.replace(name, token)
+            return value
+        if node.name == "br":
+            return "\n"
+        if node.name == "a":
+            name = clean_text(node.get_text(""))
+            if (protected_names is not None and any(char in name for char in "、,・/／､･：:")
+                    and not is_credit_label_line(name) and not standalone_credit_field_names(name)):
+                token = f"{prefix}{len(protected_names)}\ue001"
+                protected_names[token] = name
+                return token
+            return name
+        rendered = "".join(render(child) for child in node.children)
+        if node.name in {"div", "p"}:
+            first = next((child for child in node.children if not isinstance(child, Comment)
+                          and clean_text(str(child) if isinstance(child, NavigableString) else child.get_text())), None)
+            lead = clean_text(str(first) if isinstance(first, NavigableString) else first.get_text() if first else "")
+            version_group = is_parenthetical_note(lead) and is_alternate_version_heading(strip_parentheses(lead))
+            staff_heading = (re.fullmatch(r"(?:動画|映像|イラスト)担当", clean_text(node.get_text()))
+                             and node.find_parent("table", class_="atwiki_plugin_region") is not None)
+            if version_group or staff_heading:
+                marker = f"{prefix}group"
+                if section_groups is not None:
+                    section_groups.add(marker)
+                rendered = f"{marker}\n{rendered}"
+        if is_heading_node(node):
+            return f"\n{prefix}heading\n{rendered}\n"
+        return f"\n{rendered}\n" if node.name in blocks else rendered
+
+    lines = useful_lines(split_inline_credit_roles(render(soup)))
+    section_end = find_credit_section_end(lines, structural_end=f"{prefix}heading")
+    if section_end is None:
+        section_end = len(lines)
     section_start = find_credit_section_start(lines, section_end)
     return lines[section_start:section_end]
+
+
+
+def split_inline_credit_roles(text: str) -> str:
+    result = []
+    depth = 0
+    for index, char in enumerate(text):
+        if char in "（(":
+            depth += 1
+        elif char in "）)" and depth:
+            depth -= 1
+        if char == "　" and depth == 0 and re.match(r"[^\s：:]+：", text[index + 1:]):
+            result.append("\n")
+        else:
+            result.append(char)
+    return "".join(result)
 
 
 def add_credit_values(
@@ -290,13 +381,20 @@ def add_credit_values(
 
 
 def split_credit_label(line: str) -> tuple[str, str]:
-    match = re.match(r"^(.+?)[:：](.*)$", line)
-    if not match:
-        return "", ""
-    return clean_text(match.group(1)), clean_text(match.group(2))
+    depth = 0
+    for index, char in enumerate(line):
+        if char in "（(":
+            depth += 1
+        elif char in "）)" and depth:
+            depth -= 1
+        elif char in ":：" and depth == 0 and index:
+            return clean_text(line[:index]), clean_text(line[index + 1:])
+    return "", ""
 
 
 def credit_field_names(label: str) -> list[str]:
+    if any(is_alternate_version_heading(note) for note in re.findall(r"[（(]([^（）()]+)[）)]", label)):
+        return []
     normalized = re.sub(r"[（(].*?[）)]", "", label)
     if starts_parenthetical(normalized):
         return []
@@ -318,7 +416,7 @@ def japanese_credit_prefixes() -> dict[str, str]:
     return {
         label: field_name
         for label, field_name in CREDIT_LABELS.items()
-        if re.search(r"[ぁ-んァ-ン一-龯]", label)
+        if label != "歌" and re.search(r"[ぁ-んァ-ン一-龯]", label)
     }
 
 
@@ -338,8 +436,10 @@ def is_credit_label_line(line: str) -> bool:
 
 
 def is_label_boundary_line(line: str) -> bool:
-    label_text, value = split_credit_label(line)
-    if label_text and not starts_parenthetical(label_text) and (credit_field_names(label_text) or not value):
+    label_text, value = credit_label_and_value(line)
+    if label_text and not starts_parenthetical(label_text) and (
+        credit_field_names(label_text) or not value or "：" in line or re.search(r"\s:|:\s", line)
+    ):
         return True
     text = clean_text(line)
     if standalone_credit_field_names(text):
@@ -360,7 +460,7 @@ def split_credit_text(value: str) -> list[str]:
             paren_depth -= 1
             buffer += char
             continue
-        if paren_depth == 0 and char in {"、", ",", "・", "/", "／"}:
+        if paren_depth == 0 and char in {"、", ",", "・", "/", "／", "､", "･"}:
             if buffer.strip():
                 parts.append(buffer.strip())
             buffer = ""
@@ -562,7 +662,7 @@ def is_credit_value(value: str) -> bool:
 
 
 def extract_reading(soup: BeautifulSoup) -> str:
-    heading = find_last_heading(soup, "曲紹介")
+    heading = next((heading for text in INTRODUCTION_HEADINGS if (heading := find_last_heading(soup, text))), None)
     if not heading:
         return ""
     for node in heading.find_next_siblings():
@@ -589,14 +689,14 @@ def extract_reading_from_text(text: str) -> str:
 
 
 def extract_introduction(soup: BeautifulSoup) -> list[str]:
-    heading = find_last_heading(soup, "曲紹介")
+    heading = next((heading for text in INTRODUCTION_HEADINGS if (heading := find_last_heading(soup, text))), None)
     if heading:
         introduction = extract_section_items(heading)
         if introduction:
             return introduction[:8]
 
     lines = useful_lines(soup.get_text("\n"))
-    start = find_last_line_index(lines, "曲紹介")
+    start = next((index for text in INTRODUCTION_HEADINGS if (index := find_last_line_index(lines, text)) is not None), None)
     if start is None:
         return []
 
@@ -627,7 +727,7 @@ def extract_section_items(heading) -> list[str]:
 
 def add_intro_text(items: list[str], value: str) -> None:
     text = clean_intro_text(value)
-    if is_intro_sentence(text) and text not in items:
+    if text and text not in SECTION_END_MARKERS and is_intro_sentence(text, minimum_length=1) and text not in items:
         items.append(text)
 
 
@@ -649,12 +749,12 @@ def find_last_line_index(lines: list[str], target: str) -> int | None:
     return None
 
 
-def find_credit_section_end(lines: list[str]) -> int | None:
+def find_credit_section_end(lines: list[str], *, structural_end: str | None = None) -> int | None:
     saw_credit = False
     for index, line in enumerate(lines):
         if is_credit_label_line(line):
             saw_credit = True
-        elif saw_credit and line == "曲紹介":
+        elif saw_credit and (line == structural_end or line in INTRODUCTION_HEADINGS or line in SECTION_END_MARKERS):
             return index
     return None
 
@@ -706,7 +806,7 @@ def merge_intro_fragments(lines: list[str]) -> list[str]:
     return introduction
 
 
-def is_intro_sentence(value: str) -> bool:
-    if not 6 <= len(value) <= 220:
+def is_intro_sentence(value: str, *, minimum_length: int = 6) -> bool:
+    if not minimum_length <= len(value) <= 220:
         return False
     return not re.search(r"DLは。$", value)

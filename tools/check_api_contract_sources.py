@@ -20,7 +20,7 @@ EXPECTED_MARKERS = {
     "frontend/src/api.ts": (
         'from "./types"',
     ),
-    "cloudflare/worker/src/index.ts": (
+    "cloudflare/worker/src/handlers.ts": (
         'from "../../../shared/api-types"',
     ),
     "docs/web-api.md": (

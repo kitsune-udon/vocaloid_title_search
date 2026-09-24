@@ -17,6 +17,16 @@ from vocaloid_title_search.models import RawSong
 
 
 class DatabaseReadinessTests(unittest.TestCase):
+    def test_readonly_connection_escapes_filename_uri_characters(self):
+        from vocaloid_title_search.database import connect_readonly
+        with temporary_db([raw_song()]) as source:
+            unusual = source.with_name("曲 ?#%.sqlite3")
+            unusual.write_bytes(source.read_bytes())
+            with closing(connect_readonly(unusual)) as connection:
+                self.assertEqual(connection.execute("SELECT COUNT(*) FROM songs").fetchone()[0], 1)
+                with self.assertRaises(sqlite3.OperationalError):
+                    connection.execute("DELETE FROM songs")
+
     def test_missing_database_is_not_ready(self) -> None:
         with temporary_db() as db_path:
             self.assertFalse(database_is_ready(db_path.with_name("missing.sqlite3")))

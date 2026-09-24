@@ -7,7 +7,7 @@ test.beforeEach(async ({ page }) => {
 test("searches songs, opens detail, paginates, and applies stats filters", async ({ page }) => {
   await page.goto("/");
 
-  await expect(page.getByRole("heading", { name: "Vocaloid Title Search" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "表示切替" })).toBeVisible();
   await expect(page.getByText("条件を指定して検索")).toBeVisible();
 
   await page.getByLabel("文字数").fill("3");
@@ -32,6 +32,36 @@ test("searches songs, opens detail, paginates, and applies stats filters", async
 
   await expect(page.getByText("統計から適用")).toBeVisible();
   await expect(page.getByText("7文字")).toBeVisible();
+});
+
+test("search conditions stay at the top and remain usable from statistics", async ({ page }) => {
+  await page.route("**/api/search?**", route => route.fulfill({ json: {
+    total: 50, page: 1, page_size: 50,
+    results: Array.from({ length: 50 }, (_, i) => song(`検証${i}`, 3, `https://w.atwiki.jp/hmiku/pages/${i + 1}.html`, 2020)),
+  } }));
+  await page.goto("/");
+  const dock = page.getByRole("region", { name: "検索", exact: true });
+  const bounds = await dock.boundingBox();
+  const navigation = await page.getByRole("navigation", { name: "表示切替" }).boundingBox();
+  expect(bounds!.y).toBe(0);
+  const summary = await dock.locator("summary").boundingBox();
+  expect(navigation!.y).toBeGreaterThanOrEqual(summary!.y);
+  expect(navigation!.y + navigation!.height).toBeLessThanOrEqual(summary!.y + summary!.height);
+  await page.getByRole("button", { name: "統計", exact: true }).click();
+  await expect(dock.locator("details")).toHaveAttribute("open", "");
+  await page.getByRole("navigation", { name: "表示切替" }).getByRole("button", { name: "検索", exact: true }).click();
+  await page.getByLabel("文字数").fill("3");
+  await dock.getByRole("button", { name: "検索", exact: true }).click();
+  await expect(page.locator(".status")).toHaveText("1-50 / 50件");
+  await page.evaluate(() => window.scrollTo({ top: 1200, behavior: "instant" }));
+  await expect.poll(async () => (await dock.boundingBox())!.y).toBe(0);
+  await dock.locator("summary").click();
+  await expect(dock.getByRole("textbox", { name: /^文字数/ })).toBeVisible();
+  expect((await dock.boundingBox())!.height).toBeLessThan(page.viewportSize()!.height * 0.8);
+  await page.getByRole("button", { name: "統計", exact: true }).click();
+  await expect(page.getByText("タイトル文字数", { exact: true })).toBeVisible();
+  await dock.getByRole("button", { name: "検索", exact: true }).click();
+  await expect(page.getByRole("region", { name: "検索結果", exact: true })).toBeVisible();
 });
 
 test("a newer stats search supersedes an in-flight search", async ({ page }) => {
@@ -63,12 +93,117 @@ test("a newer stats search supersedes an in-flight search", async ({ page }) => 
   await expect(page.getByText("統計から適用")).toBeVisible();
 });
 
+test("pagination keeps the applied filters while form edits remain a draft", async ({ page }) => {
+  await page.goto("/");
+  const controls = page.getByLabel("検索", { exact: true });
+  await page.getByLabel("文字数").fill("3");
+  await controls.getByRole("button", { name: "検索", exact: true }).click();
+  await expect(page.getByText("1-50 / 51件")).toBeVisible();
+  await controls.locator("summary").click();
+  await controls.getByRole("textbox", { name: /^文字数/ }).fill("7");
+  const request = page.waitForRequest(request => request.url().includes("page=2"));
+  await page.getByRole("button", { name: "次のページへ" }).click();
+  expect(new URL((await request).url()).searchParams.get("length")).toBe("3");
+  await expect(page.getByText("51-51 / 51件")).toBeVisible();
+});
+
+test("closing detail aborts its request and reopening loads a fresh detail", async ({ page }) => {
+  let releaseOld!: () => void;
+  const oldResponse = new Promise<void>(resolve => { releaseOld = resolve; });
+  let calls = 0;
+  await page.route("**/api/song-detail?**", async route => {
+    calls++;
+    if (calls === 1) {
+      await oldResponse;
+      await route.fulfill({ json: { ...songDetail, introduction: ["古い詳細"] } });
+    } else {
+      await route.fulfill({ json: { ...songDetail, introduction: ["新しい詳細"] } });
+    }
+  });
+  await page.goto("/");
+  await page.getByLabel("検索", { exact: true }).getByRole("button", { name: "検索", exact: true }).click();
+  const failed = page.waitForEvent("requestfailed", request => request.url().includes("/api/song-detail?"));
+  await page.getByRole("button", { name: /メルトの詳細を開く/ }).click();
+  await expect.poll(() => calls).toBe(1);
+  try {
+    await page.getByRole("button", { name: /メルトの詳細を閉じる/ }).click();
+    await failed;
+    await page.getByRole("button", { name: /メルトの詳細を開く/ }).click();
+    await expect(page.getByText("新しい詳細", { exact: true })).toBeVisible();
+  } finally {
+    releaseOld();
+  }
+  await expect(page.getByText("古い詳細", { exact: true })).toHaveCount(0);
+});
+
+test("a stalled search times out and can be retried", async ({ page }) => {
+  await page.clock.install();
+  let release!: () => void;
+  const stalled = new Promise<void>(resolve => { release = resolve; });
+  let requests = 0;
+  await page.route("**/api/search?**", async route => {
+    if (++requests === 1) {
+      await stalled;
+      await route.abort();
+    } else {
+      await route.fallback();
+    }
+  });
+  await page.goto("/");
+  const search = page.getByLabel("検索", { exact: true }).getByRole("button", { name: "検索", exact: true });
+  await search.click();
+  await expect.poll(() => requests).toBe(1);
+  try {
+    await page.clock.fastForward(21_000);
+    await expect(page.getByText("通信に失敗しました。ネットワーク状態を確認して再実行してください。")).toBeVisible();
+    await expect(search).toBeEnabled();
+  } finally {
+    release();
+  }
+  await search.click();
+  await expect(page.getByText("メルト", { exact: true })).toBeVisible();
+});
+
+test("search waits for initial tag defaults and can recover from an initial fetch failure", async ({ page }) => {
+  let calls = 0;
+  let release!: () => void;
+  const pending = new Promise<void>(resolve => { release = resolve; });
+  await page.route("**/api/popularity-labels", async route => {
+    calls++;
+    if (calls === 1) {
+      await pending;
+      await route.abort();
+    } else {
+      await route.fallback();
+    }
+  });
+  await page.goto("/");
+  const search = page.getByLabel("検索", { exact: true }).getByRole("button", { name: "検索", exact: true });
+  try {
+    await expect(search).toBeDisabled();
+  } finally {
+    release();
+  }
+  await expect(page.getByRole("alert")).toBeVisible();
+  await expect(search).toBeDisabled();
+  await page.getByRole("button", { name: "再読み込み", exact: true }).click();
+  await expect(search).toBeEnabled();
+  const requested = page.waitForRequest(request => request.url().includes("/api/search?"));
+  await search.click();
+  const labels = new URL((await requested).url()).searchParams.getAll("popularity_label");
+  expect(labels.length).toBeGreaterThan(0);
+  expect(labels).not.toContain("殿堂入り");
+});
+
 test("video thumbnails recover from a failed first candidate", async ({ page }) => {
   await page.route("**/api/song-detail?**", route => route.fulfill({ json: {
     ...songDetail,
     videos: { niconico: [{ id: "sm1", title: "検証動画", url: "https://example.test/video",
       thumbnail_url: "https://example.test/thumb-broken.png",
-      thumbnail_urls: ["https://example.test/thumb-broken.png", "https://example.test/thumb-good.png"] }], youtube: [] },
+      thumbnail_urls: ["https://example.test/thumb-broken.png", "https://example.test/thumb-good.png"] }],
+      youtube: [{ id: "abcdefghijk", title: "YouTube検証動画", url: "https://example.test/youtube",
+        thumbnail_url: "https://example.test/thumb-broken.png",
+        thumbnail_urls: ["https://example.test/thumb-broken.png", "https://example.test/thumb-good.png"] }] },
   } }));
   await page.route("https://example.test/thumb-broken.png", route => route.fulfill({ status: 404 }));
   await page.route("https://example.test/thumb-good.png", route => route.fulfill({ contentType: "image/png",
@@ -77,10 +212,29 @@ test("video thumbnails recover from a failed first candidate", async ({ page }) 
   await page.getByLabel("文字数").fill("3");
   await page.getByLabel("検索", { exact: true }).getByRole("button", { name: "検索" }).click();
   await page.getByRole("button", { name: /メルトの詳細を開く/ }).click();
-  const image = page.getByRole("img", { name: "検証動画" });
-  await image.scrollIntoViewIfNeeded();
-  await expect(image).toHaveAttribute("data-thumbnail-index", "1");
-  await expect.poll(() => image.evaluate(node => (node as HTMLImageElement).naturalWidth)).toBe(1);
+  for (const name of ["検証動画", "YouTube検証動画"]) {
+    const image = page.getByRole("img", { name, exact: true });
+    await image.scrollIntoViewIfNeeded();
+    await expect(image).toHaveAttribute("data-thumbnail-index", "1");
+    await expect.poll(() => image.evaluate(node => (node as HTMLImageElement).naturalWidth)).toBe(1);
+  }
+});
+
+test("keyboard detail toggle and retry recover from a server error", async ({ page }) => {
+  let calls = 0;
+  await page.route("**/api/song-detail?**", route => ++calls === 1
+    ? route.fulfill({ status: 503, json: { detail: "database is being updated" } })
+    : route.fulfill({ json: songDetail }));
+  await page.goto("/");
+  await page.getByLabel("検索", { exact: true }).getByRole("button", { name: "検索", exact: true }).click();
+  const row = page.getByRole("button", { name: /メルトの詳細を開く/ });
+  await row.focus();
+  await row.press("Enter");
+  await page.getByRole("button", { name: "再試行", exact: true }).click();
+  await expect(page.getByText("作曲: ryo")).toBeVisible();
+  const expanded = page.getByRole("button", { name: /メルトの詳細を閉じる/ });
+  await expanded.press("Space");
+  await expect(page.getByText("作曲: ryo")).toHaveCount(0);
 });
 
 async function mockApi(page: Page): Promise<void> {
@@ -106,7 +260,7 @@ async function mockApi(page: Page): Promise<void> {
       json: {
         total: byStats ? 1 : 51,
         page: pageNumber,
-        page_size: 2,
+        page_size: Number(url.searchParams.get("page_size") ?? "50"),
         results,
       },
     });

@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import json
+import uuid
 import os
 import tempfile
 import re
@@ -12,6 +14,14 @@ import sys
 from contextlib import closing
 from pathlib import Path
 
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from vocaloid_title_search.database import connect_readonly, statistics_from_connection
+from vocaloid_title_search.database_quality import (load_core_counts, validate_metadata, validate_relations,
+                                                  count_detail_json_values, validate_detail_json_counts,
+                                                  count_song_value_errors, validate_song_values)
+
+PUBLICATION_KEY = "api_publication_v1"
 
 TABLES = ["songs", "metadata", "song_details", "song_credit_people"]
 
@@ -43,14 +53,15 @@ def main() -> int:
         print(f"DB not found: {args.db_path}", file=sys.stderr)
         return 2
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    with closing(sqlite3.connect(f"file:{args.db_path}?mode=ro", uri=True)) as connection:
+    with closing(connect_readonly(args.db_path)) as connection:
+        connection.execute("BEGIN")
         validate_database(connection)
-        export_atomic(connection, args.output)
+        export_atomic(connection, args.output, publish=True)
     print(f"Exported D1 SQL: {args.output}")
     return 0
 
 
-def export_atomic(connection: sqlite3.Connection, output_path: Path, *, empty_database: bool = False) -> None:
+def export_atomic(connection: sqlite3.Connection, output_path: Path, *, empty_database: bool = False, publish: bool = False) -> None:
     temporary_path = None
     try:
         with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", newline="\n",
@@ -58,10 +69,10 @@ def export_atomic(connection: sqlite3.Connection, output_path: Path, *, empty_da
                                          delete=False) as output:
             temporary_path = Path(output.name)
             if empty_database:
-                for table in reversed(TABLES):
+                for table in ["metadata", "song_credit_people", "song_details", "songs"]:
                     output.write(f"DROP TABLE IF EXISTS {table};\n")
             else:
-                write_export(connection, output)
+                write_export(connection, output, publish=publish)
             output.flush()
             os.fsync(output.fileno())
         os.replace(temporary_path, output_path)
@@ -81,8 +92,24 @@ def validate_database(connection: sqlite3.Connection) -> None:
         raise SystemExit(f"DB metadata missing: {', '.join(missing)}")
 
 
-def write_export(connection: sqlite3.Connection, output) -> None:
-    for table in reversed(TABLES):
+def publication_record(connection: sqlite3.Connection) -> str:
+    """Validate the immutable source, then compute runtime data once per release."""
+    metadata = dict(connection.execute("SELECT key, value FROM metadata"))
+    metadata.pop(PUBLICATION_KEY, None)
+    errors = validate_metadata(metadata, load_core_counts(connection)) + validate_relations(connection)
+    errors += validate_song_values(count_song_value_errors(connection))
+    errors += validate_detail_json_counts(count_detail_json_values(connection, {"niconico": set(), "youtube": set()}, require_complete=True))
+    if errors:
+        raise ValueError("Cannot publish: " + "; ".join(errors))
+    return json.dumps({"version": 1, "revision": uuid.uuid4().hex, "metadata": metadata,
+                       "statistics": statistics_from_connection(connection)}, ensure_ascii=False, separators=(",", ":"))
+
+
+def write_export(connection: sqlite3.Connection, output, *, publish: bool = False) -> None:
+    # Generate from the validated release snapshot, never trust a stale saved record.
+    record = publication_record(connection) if publish else dict(connection.execute(
+        "SELECT key, value FROM metadata")).get(PUBLICATION_KEY)
+    for table in ["metadata", "song_credit_people", "song_details", "songs"]:
         output.write(f"DROP TABLE IF EXISTS {table};\n")
     for table in TABLES:
         sql = connection.execute(
@@ -104,12 +131,21 @@ def write_export(connection: sqlite3.Connection, output) -> None:
         """
     ):
         output.write(f"{sql};\n")
+    if publish:
+        output.write("CREATE INDEX IF NOT EXISTS idx_songs_order ON songs (popularity_score DESC, popularity_order, sort_order);\n")
+    # Readiness stays absent until every table, row and index has succeeded.
+    # Rollback retains its original revision but restores it last as well.
+    if record is not None:
+        output.write("INSERT INTO metadata (key, value) VALUES (" + sql_literal(connection, PUBLICATION_KEY)
+                     + ", " + sql_literal(connection, record) + ");\n")
 
 
 def write_rows(connection: sqlite3.Connection, output, table: str) -> None:
     columns = [row[1] for row in connection.execute(f"PRAGMA table_info({table})")]
     column_sql = ", ".join(quote_identifier(column) for column in columns)
     for row in connection.execute(f"SELECT {column_sql} FROM {quote_identifier(table)}"):
+        if table == "metadata" and row[columns.index("key")] == PUBLICATION_KEY:
+            continue
         values = ", ".join(sql_literal(connection, value) for value in row)
         output.write(f"INSERT INTO {quote_identifier(table)} ({column_sql}) VALUES ({values});\n")
 

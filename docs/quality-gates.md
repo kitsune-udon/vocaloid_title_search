@@ -69,7 +69,8 @@ tools/deploy_cloudflare.sh --env staging --dry-run
 | `metadata.detail_schema_version` | 実装が期待する値と一致 |
 | `metadata.song_count` | `songs` 件数と一致 |
 | `metadata.detail_count` | `song_details` 件数と一致 |
-| 詳細JSON | 破損・object以外が0件 |
+| 詳細JSON | 破損・object以外・型不正が0件。公開用は全必須フィールドを持つ |
+| 検索用派生値 | 詳細JSONの作曲者と公開年に一致する |
 | 公開用動画補完 | 対象のある両サービスで取得成功率80%以上、集計件数と動画IDが一致 |
 | 作曲者派生テーブル | 空でない |
 | 公開年 | 空でない |
@@ -133,7 +134,7 @@ tools/deploy_cloudflare.sh --env staging --dry-run
 
 | 領域 | 確認すること |
 | --- | --- |
-| ヘッダー | アプリ名、説明、ビュー切替が縦に伸びすぎない |
+| 上端固定欄 | 検索条件の見出し、検索／統計切替、開閉操作が重ならない |
 | 検索条件 | 開閉ボタンが見つけやすく、入力欄が不自然に狭くない |
 | 結果カード | 曲名、Wikiリンク、開閉操作、表示項目が読みやすい |
 | 詳細アコーディオン | 読み込み中、空状態、エラー状態がカード内で破綻しない |
@@ -187,3 +188,38 @@ tools/deploy_cloudflare.sh --env staging --dry-run
 - コード変更が必要な改善が documentation backlog に混ざっていないか
 
 完了済みタスクは、変更内容が安定し、関連ドキュメントから参照できるようになったら削除して構いません。
+
+## Completion Audit
+
+大きな最適化作業は、全領域を点検し、重大な既知問題の解消、現行機能とUI方針の維持、同一条件での改善測定、最終コードの検証、残課題の分類を終えた時点で閉じます。時間の消費や改善案の数は終了判定にしません。
+
+対象と証拠は [開発backlogの監査表](development-backlog.md#completion-audit) に記録します。commit・push・本番適用を含むかも最初に明示します。リリースの承認とstaging・production確認はこのローカル完了判定とは別です。
+
+
+完了は未証明として、各受入条件に最終状態の直接証拠と確認限界を対応付けます。テスト件数、Done表記、実装したという説明だけでは終了しません。実装後には、入力境界、欠損、通信失敗、中断、再試行、競合、互換性、復旧から反証を試み、既存テスト自体が誤った前提を固定していないか確認します。発見した問題の修正後は影響範囲を再検証し、未検証・失敗・権限不足を成功に読み替えません。終了条件と証拠の照合が済むまで監査を閉じません。
+
+
+## Machine Completion Records
+
+継続監査の受入条件と個別課題は `docs/completion/ledger.json`、登録済み定義は `docs/completion/registry.json` に保持します。これらの監査項目は解決後も削除せず、解決理由と証拠を残します。検証はプロジェクトのPythonとNode環境で次の記録器から実行します。
+
+```bash
+python tools/completion_gate.py run --id all
+python tools/completion_gate.py check
+python tools/completion_gate.py check --format json
+```
+
+`run`は登録コマンドの実行環境、開始終了時刻、終了コード、ログとハッシュ、実行前後のソース・入力fingerprintを `release/completion/` に保存します。`check`は全必須検証、証拠、未解決状態を照合し、不足があれば非ゼロ終了します。ソース変更後は過去の成功をそのまま再利用しません。
+
+クレジットの個別原文照合は `docs/completion/credit-reviews.json` に期待値・原文ハッシュ・判定理由を保存します。`credit-reviewed` はそこに記録済みの項目だけを検証し、`credit-coverage` は台帳にある全クレジット候補の網羅も要求します。一部の照合成功を全件確認済みと扱ってはいけません。`credit-atomic-names`は確認済みの単一リンク人名を根拠に、候補DB全曲の全役割で既知の名前断片が残っていないか検査します。これは未確認の全人名の正しさを証明するものではありません。
+
+```bash
+python tools/completion_gate.py run --id credit-reviewed
+python tools/completion_gate.py run --id credit-coverage
+python tools/completion_gate.py run --id credit-atomic-names
+```
+
+候補DBの照合は更新前コピーと比較し、レビュー対象外の値、動画メタデータ、紹介文、曲一覧、更新日時の保持と、作曲者派生表の整合性を検証します。原文HTMLと候補DBはローカルの生成物です。不在・変更・期待値の欠落は成功ではありません。
+
+
+各残件の `acceptance`（合格基準）と `verification`（検証方法）、`next_action` を必須にします。成功した検証でも、その `requirements` に対象要求が含まれなければ証拠には使えません。複数要求に属する残件は全要求を証拠で覆う必要があります。実行時の関連IDと現在の台帳の関連IDも照合し、追加した項目を古い実行記録で検証済みにはしません。子コマンドが終了コード0でも、Python・Node・Playwright/pytestの明示的な失敗サマリーを拒否します。Nodeのspec reporterを含む既知のテスト出力で0件・skip・todoも拒否しますが、任意の独自スクリプトの出力から検証内容を証明するものではありません。独自検証は対象件数と独立した期待値を明示的に検査します。

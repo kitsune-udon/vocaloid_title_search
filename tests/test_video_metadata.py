@@ -1,7 +1,11 @@
+import json
+import sqlite3
+from contextlib import closing
 import unittest
 from unittest.mock import patch
 from tests.helpers import temporary_db, raw_song, MELT_URL
-from vocaloid_title_search.database import save_song_detail_entry, load_metadata, load_song_detail
+from vocaloid_title_search.database import load_metadata, load_song_detail
+from tests.helpers import save_complete_detail as save_song_detail_entry
 from vocaloid_title_search.database_quality import validate_database_quality
 from vocaloid_title_search.video_metadata import refresh_stored_video_metadata, is_fallback_metadata
 
@@ -14,6 +18,68 @@ from vocaloid_title_search.video_metadata import (
 
 
 class VideoMetadataTests(unittest.TestCase):
+    def test_refresh_respects_build_lock_before_network_access(self):
+        from vocaloid_title_search.build_checkpoint import build_lock
+        with temporary_db([raw_song()]) as path, build_lock(path):
+            before = path.read_bytes()
+            with patch("vocaloid_title_search.video_metadata.fetch_all_video_metadata") as fetcher:
+                self.assertEqual(refresh_stored_video_metadata(path, max_workers=1, timeout=1), 1)
+                fetcher.assert_not_called()
+            self.assertEqual(before, path.read_bytes())
+
+    def test_identical_refresh_does_not_rewrite_detail_rows(self):
+        with temporary_db([raw_song()]) as path:
+            save_song_detail_entry(path, MELT_URL, {"videos": {"niconico": [{"id": "sm1"}]}})
+            fresh = {"niconico": {"sm1": {"title": "Real title", "thumbnail_url": "https://example.test/image.jpg"}}, "youtube": {}}
+            with patch("vocaloid_title_search.video_metadata.fetch_all_video_metadata", return_value=fresh):
+                self.assertEqual(refresh_stored_video_metadata(path, max_workers=1, timeout=1), 0)
+                with closing(sqlite3.connect(path)) as connection:
+                    connection.executescript("""
+                        CREATE TRIGGER reject_detail_rewrite BEFORE UPDATE ON song_details
+                        BEGIN SELECT RAISE(ABORT, 'unchanged row was rewritten'); END;
+                    """)
+                self.assertEqual(refresh_stored_video_metadata(path, max_workers=1, timeout=1), 0)
+            self.assertTrue(validate_database_quality(path, require_video_metadata=True).ok)
+
+    def test_repeated_metadata_fetch_is_fresh_within_one_process(self):
+        from vocaloid_title_search.video_metadata import youtube_video_metadata
+        with patch("vocaloid_title_search.video_metadata.fetch_text", side_effect=[
+            '{"title":"first","thumbnail_url":"https://example.test/first.jpg"}',
+            '{"title":"second","thumbnail_url":"https://example.test/second.jpg"}',
+        ]) as fetcher:
+            self.assertEqual(youtube_video_metadata("video")["title"], "first")
+            self.assertEqual(youtube_video_metadata("video")["title"], "second")
+            self.assertEqual(fetcher.call_count, 2)
+
+    def test_diagnostics_distinguish_deleted_http_and_invalid_responses(self):
+        import urllib.error
+        from vocaloid_title_search.video_metadata import niconico_video_metadata, youtube_video_metadata
+        with patch("vocaloid_title_search.video_metadata.fetch_text", return_value='<nicovideo_thumb_response status="fail"><error><code>DELETED</code></error></nicovideo_thumb_response>'):
+            self.assertEqual(niconico_video_metadata("sm1")["fetch_error"], "provider_DELETED")
+        for fetcher in (niconico_video_metadata, youtube_video_metadata):
+            with patch("vocaloid_title_search.video_metadata.fetch_text", side_effect=urllib.error.HTTPError("https://example.test", 429, "limited", {}, None)):
+                self.assertEqual(fetcher("sm1")["fetch_error"], "http_429")
+            with patch("vocaloid_title_search.video_metadata.fetch_text", return_value='broken response'):
+                self.assertEqual(fetcher("sm1")["fetch_error"], "invalid_response")
+
+    def test_service_diagnostics_record_failed_ids_without_response_bodies(self):
+        import time
+        from vocaloid_title_search.video_metadata import fetch_service_video_metadata
+        messages = []
+        fetch_service_video_metadata("niconico", ["sm1", "sm2"],
+            lambda identifier: {"title": "ニコニコ動画", "thumbnail_url": "fallback", "fetch_error": "http_429"},
+            max_workers=1, started_at=time.perf_counter(), progress=messages.append)
+        report = next(message for message in messages if "取得診断" in message)
+        self.assertEqual(json.loads(report.split(": ", 1)[1]), {"http_429": ["sm1", "sm2"]})
+
+    def test_diagnostic_fields_do_not_enter_public_video_payload(self):
+        video = {"id": "sm1"}
+        detail = {"videos": {"niconico": [video]}}
+        apply_video_metadata(detail, {"niconico": {"sm1": {
+            "title": "ニコニコ動画", "thumbnail_url": "https://example.test/image.jpg", "fetch_error": "http_429",
+        }}, "youtube": {}})
+        self.assertNotIn("fetch_error", video)
+
     def test_official_url_matching_fallback_is_still_success(self) -> None:
         self.assertFalse(is_fallback_metadata("niconico", "sm1", {
             "title": "Real title", "thumbnail_url": fallback_niconico_thumbnail_url("sm1"),

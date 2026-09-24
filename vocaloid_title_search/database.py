@@ -77,6 +77,9 @@ def ensure_database(connection: sqlite3.Connection) -> None:
     )
     connection.executescript(
         """
+        CREATE INDEX IF NOT EXISTS idx_songs_order
+            ON songs (popularity_score DESC, popularity_order, sort_order);
+
         CREATE INDEX IF NOT EXISTS idx_songs_title_length
             ON songs(title_length, sort_order);
 
@@ -361,72 +364,76 @@ def load_metadata(db_path: Path) -> dict[str, str]:
 
 def load_statistics(db_path: Path) -> dict[str, object]:
     with closing(connect_readonly(db_path)) as connection:
-        total_songs = connection.execute("SELECT COUNT(*) FROM songs").fetchone()[0]
-        detail_count = connection.execute("SELECT COUNT(*) FROM song_details").fetchone()[0]
-        with_composer = connection.execute(
-            """
-            SELECT COUNT(DISTINCT song_url)
-            FROM song_credit_people
-            WHERE role = 'composer'
-            """
-        ).fetchone()[0]
-        with_published_year = connection.execute(
-            "SELECT COUNT(*) FROM song_details WHERE published_year IS NOT NULL"
-        ).fetchone()[0]
-        return {
-            "total_songs": total_songs,
-            "detail_count": detail_count,
-            "with_composer": with_composer,
-            "with_published_year": with_published_year,
-            "by_title_length": [
-                {"length": row[0], "count": row[1]}
-                for row in connection.execute(
-                    """
-                    SELECT title_length, COUNT(*)
-                    FROM songs
-                    GROUP BY title_length
-                    ORDER BY title_length
-                    """
-                )
-            ],
-            "by_published_year": [
-                {"year": row[0], "count": row[1]}
-                for row in connection.execute(
-                    """
-                    SELECT published_year, COUNT(*)
-                    FROM song_details
-                    WHERE published_year IS NOT NULL
-                    GROUP BY published_year
-                    ORDER BY published_year
-                    """
-                )
-            ],
-            "by_popularity_label": [
-                {"label": row[0], "count": row[1]}
-                for row in connection.execute(
-                    """
-                    SELECT popularity_label, COUNT(*)
-                    FROM songs
-                    WHERE popularity_label <> ''
-                    GROUP BY popularity_label
-                    ORDER BY MAX(popularity_score) DESC, popularity_label
-                    """
-                )
-            ],
-            "top_composers": [
-                {"name": row[0], "count": row[1]}
-                for row in connection.execute(
-                    """
-                    SELECT MIN(name), COUNT(DISTINCT song_url) AS song_count
-                    FROM song_credit_people
-                    WHERE role = 'composer'
-                    GROUP BY normalized_name
-                    ORDER BY song_count DESC, MIN(name)
-                    LIMIT 30
-                    """
-                )
-            ],
-        }
+        return statistics_from_connection(connection)
+
+
+def statistics_from_connection(connection: sqlite3.Connection) -> dict[str, object]:
+    total_songs = connection.execute("SELECT COUNT(*) FROM songs").fetchone()[0]
+    detail_count = connection.execute("SELECT COUNT(*) FROM song_details").fetchone()[0]
+    with_composer = connection.execute(
+        """
+        SELECT COUNT(DISTINCT song_url)
+        FROM song_credit_people
+        WHERE role = 'composer'
+        """
+    ).fetchone()[0]
+    with_published_year = connection.execute(
+        "SELECT COUNT(*) FROM song_details WHERE published_year IS NOT NULL"
+    ).fetchone()[0]
+    return {
+        "total_songs": total_songs,
+        "detail_count": detail_count,
+        "with_composer": with_composer,
+        "with_published_year": with_published_year,
+        "by_title_length": [
+            {"length": row[0], "count": row[1]}
+            for row in connection.execute(
+                """
+                SELECT title_length, COUNT(*)
+                FROM songs
+                GROUP BY title_length
+                ORDER BY title_length
+                """
+            )
+        ],
+        "by_published_year": [
+            {"year": row[0], "count": row[1]}
+            for row in connection.execute(
+                """
+                SELECT published_year, COUNT(*)
+                FROM song_details
+                WHERE published_year IS NOT NULL
+                GROUP BY published_year
+                ORDER BY published_year
+                """
+            )
+        ],
+        "by_popularity_label": [
+            {"label": row[0], "count": row[1]}
+            for row in connection.execute(
+                """
+                SELECT popularity_label, COUNT(*)
+                FROM songs
+                WHERE popularity_label <> ''
+                GROUP BY popularity_label
+                ORDER BY MAX(popularity_score) DESC, popularity_label
+                """
+            )
+        ],
+        "top_composers": [
+            {"name": row[0], "count": row[1]}
+            for row in connection.execute(
+                """
+                SELECT MIN(name), COUNT(DISTINCT song_url) AS song_count
+                FROM song_credit_people
+                WHERE role = 'composer'
+                GROUP BY normalized_name
+                ORDER BY song_count DESC, MIN(name)
+                LIMIT 30
+                """
+            )
+        ],
+    }
 
 
 def database_is_ready(db_path: Path) -> bool:
@@ -452,7 +459,7 @@ def database_is_ready(db_path: Path) -> bool:
 
 
 def connect_readonly(db_path: Path) -> sqlite3.Connection:
-    return sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    return sqlite3.connect(db_path.resolve().as_uri() + "?mode=ro", uri=True)
 
 
 def load_song_detail(db_path: Path, url: str) -> dict[str, object] | None:

@@ -90,17 +90,7 @@ DB readiness を返します。
 
 `database_ready:false` の場合は、[operations.md](operations.md#troubleshooting) の手順でD1投入とWorker bindingを確認します。
 
-readiness判定の主な確認項目:
-
-| 項目 | 意味 |
-| --- | --- |
-| D1 binding `DB` | Workerが想定するD1を見ている |
-| `songs` が空でない | 曲一覧が投入済み |
-| `metadata.schema_version` | Workerが期待するschemaと一致 |
-| `metadata.detail_schema_version` | Workerが期待する曲詳細schemaと一致 |
-| `metadata.song_count` | 実際の曲数と一致 |
-| `metadata.detail_count` | 実際の詳細件数と一致 |
-| `song_details` 件数 | 曲数と一致している |
+Workerは `metadata.api_publication_v1` の1レコードを参照します。公開形式version、DB・詳細schema、正の曲数、詳細数・統計総数の一致を確認します。曲・詳細テーブルの全件検査はSQL生成時に行い、リクエストごとには繰り返しません。レコード欠落・不正・D1読み取り失敗では未準備になります。未公開の旧DBへの移行手順は [operations.md](operations.md#publication-format-migration) を参照してください。
 
 ## GET /api/search
 
@@ -210,7 +200,7 @@ DB not ready response:
 
 ## GET /api/stats
 
-DB全体の統計情報を返します。統計ビューはこのAPIを使います。DB が未作成、空、または metadata 不足の場合は `503` を返します。
+SQL生成時に事前集計したDB全体の統計情報を返します。統計ビューはこのAPIを使います。DB が未作成、空、または metadata 不足の場合は `503` を返します。
 
 Response:
 
@@ -249,7 +239,7 @@ DB not ready response:
 
 ## GET /api/metadata
 
-DB の `metadata` テーブルを返します。DB が未作成、空、または metadata 不足の場合は `503` を返します。
+公開完了レコードに保存した `metadata` を返します。内部の公開完了レコード自体は含めません。DB が未作成、空、または metadata 不足の場合は `503` を返します。
 
 metadataは、Web UI のデータ状態表示、運用時のD1投入確認、smoke testで使います。通常ユーザーが直接見るための詳細データではありません。
 
@@ -327,3 +317,16 @@ CORSを変更した場合は、staging / production の両方で確認します�
 数値queryはJavaScriptの安全な整数範囲で検証し、ページoffsetの乗算結果も範囲外なら `400` を返します。形式不正の検索条件やWiki URLはD1アクセス前に拒否するため、DB未準備時も入力エラーが優先されます。
 
 DB readinessのmetadata・件数確認、および検索の件数・結果取得はそれぞれbatchで実行します。根拠タグ未指定の検索ではタグ一覧を取得しません。レスポンス形式と並び順は維持します。
+
+
+## Search Cache And Read Metrics
+
+検索結果はWorkerの同一isolate内で60秒間保持します。正規化済みの条件、ページ・件数・並び順、公開revisionをキーにし、最大128件・本文合計2MiB（1件128KiB）に制限します。長いキーは保存しません。isolateの再作成・地域の違いでヒットしない場合があります。追加のKVサービスは使いません。
+
+キャッシュ参照前にも公開レコードを読み、投入中・未準備ではキャッシュを返しません。未キャッシュ検索と詳細は、取得後も同じrevisionであることを確認し、更新にまたがる応答は503にします。400・404・503・500は保存しません。HTTP応答は従来通り `Cache-Control: no-store` で、CORSは各リクエストから生成します。`x-search-cache` は検索成功時に `hit` / `miss` を返します。
+
+全曲、文字数のみ、公開年のみ、タグのみの検索件数は事前集計から求めます。作曲者や複数軸の条件はSQLで件数を取得します。読み取り計測ヘッダーと検証方法は [testing.md](testing.md#local-d1-read-budget) を参照してください。
+
+## Implementation Boundaries
+
+`cloudflare/worker/src/index.ts` はHTTPルーティングと計測を担当し、`handlers.ts` がAPI処理を実装します。入力正規化とSQL条件は `search-query.ts`、公開状態の検証は `publication.ts` に集約します。検索は絞り込み・並べ替え・ページ選択を行ってから、そのページの作曲者を付加します。結果順、件数、NULL公開年の扱い、API型は維持します。

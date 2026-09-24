@@ -32,6 +32,7 @@ from vocaloid_title_search.cli.common import (
     positive_int,
 )
 from vocaloid_title_search.detail import fetch_song_detail
+from vocaloid_title_search.detail_contract import valid_detail
 from vocaloid_title_search.build_checkpoint import build_lock, mark_checkpoint, verify_checkpoint, reuse_details
 from vocaloid_title_search.video_metadata import refresh_stored_video_metadata
 from vocaloid_title_search.cli.refresh_video_metadata import (
@@ -83,7 +84,7 @@ def build_database(args: argparse.Namespace) -> int:
     try:
         with build_lock(args.db_path):
             return build_locked(args)
-    except (ValueError, sqlite3.DatabaseError) as exc:
+    except (ValueError, sqlite3.DatabaseError, OSError) as exc:
         print(f"DB構築失敗: {exc}", file=sys.stderr)
         return 1
 
@@ -128,15 +129,30 @@ def build_locked(args: argparse.Namespace) -> int:
         if not report.ok:
             print("DB品質検査失敗: " + "; ".join(report.errors), file=sys.stderr)
             return 1
-        with closing(sqlite3.connect(temp_path)) as connection:
-            connection.execute("DELETE FROM metadata WHERE key = 'build_checkpoint'")
-            connection.commit()
-        os.replace(temp_path, args.db_path)
+        publish_build_database(temp_path, args.db_path, preserve_checkpoint=args.resume)
         print(f"DBを作成しました: {args.db_path} / {time.perf_counter() - started_at:.1f}秒")
         return 0
     finally:
         if not args.resume:
             temp_path.unlink(missing_ok=True)
+
+
+def publish_build_database(candidate: Path, target: Path, *, preserve_checkpoint: bool) -> None:
+    # Keep the resumable candidate intact until the final rename has succeeded.
+    output = temporary_build_database_path(target) if preserve_checkpoint else candidate
+    try:
+        if preserve_checkpoint:
+            with closing(sqlite3.connect(candidate)) as source, closing(sqlite3.connect(output)) as destination:
+                source.backup(destination)
+        with closing(sqlite3.connect(output)) as connection:
+            connection.execute("DELETE FROM metadata WHERE key = 'build_checkpoint'")
+            connection.commit()
+        os.replace(output, target)
+        if preserve_checkpoint:
+            candidate.unlink(missing_ok=True)
+    finally:
+        if preserve_checkpoint:
+            output.unlink(missing_ok=True)
 
 
 def temporary_build_database_path(db_path: Path) -> Path:
@@ -157,7 +173,9 @@ def build_song_details(args: argparse.Namespace, db_path: Path) -> int:
         stored = set()
         for url, payload, schema in existing.execute("SELECT url, payload_json, schema_version FROM song_details"):
             try:
-                if schema == DETAIL_SCHEMA_VERSION and isinstance(json.loads(payload), dict):
+                detail = json.loads(payload)
+                if (schema == DETAIL_SCHEMA_VERSION and isinstance(detail, dict)
+                        and valid_detail(detail, url, complete=args.with_video_metadata)):
                     stored.add(url)
             except json.JSONDecodeError:
                 pass

@@ -14,9 +14,14 @@ from vocaloid_title_search.database import (
     DETAIL_SCHEMA_VERSION,
     REQUIRED_METADATA_KEYS,
     connect_readonly,
+    credit_people_rows,
+    detail_published_year,
 )
 
 
+from vocaloid_title_search.models import SongEntry
+from vocaloid_title_search.wiki import POPULARITY_TAGS
+from vocaloid_title_search.detail_contract import valid_detail
 from vocaloid_title_search.video_metadata import video_ids_fingerprint
 from vocaloid_title_search.quality_policy import QualityPolicy, compare_counts, video_refresh_errors
 
@@ -86,8 +91,10 @@ def validate_database_quality(db_path: Path, *, require_video_metadata: bool = F
 
             metadata = dict(connection.execute("SELECT key, value FROM metadata"))
             counts.update(load_core_counts(connection))
+            counts.update(count_song_value_errors(connection))
+            errors.extend(validate_song_values(counts))
             video_ids = {"niconico": set(), "youtube": set()}
-            detail_json_counts = count_detail_json_values(connection, video_ids)
+            detail_json_counts = count_detail_json_values(connection, video_ids, require_complete=require_video_metadata)
             counts.update(detail_json_counts)
             errors.extend(validate_metadata(metadata, counts))
             errors.extend(validate_relations(connection))
@@ -128,6 +135,40 @@ def load_table_names(connection: sqlite3.Connection) -> set[str]:
     return {row[0] for row in rows}
 
 
+def count_song_value_errors(connection: sqlite3.Connection) -> dict[str, int]:
+    """Recompute searchable values from their source, not from stored aggregates."""
+    invalid = 0
+    positions = []
+    scores = dict(POPULARITY_TAGS)
+    scores[""] = 0
+    for raw, title, artist, note, length, position, score, label, order in connection.execute(
+        "SELECT raw_title, title, artist, artist_note, title_length, sort_order, "
+        "popularity_score, popularity_label, popularity_order FROM songs"
+    ):
+        positions.append(position)
+        if not isinstance(raw, str):
+            invalid += 1
+            continue
+        expected = SongEntry.from_raw(raw)
+        if (not expected.is_song or not expected.title.strip()
+                or (title, artist, note, length) != (expected.title, expected.artist, expected.artist_note, expected.title_length)
+                or type(length) is not int or type(position) is not int or position < 1
+                or type(score) is not int or scores.get(label) != score
+                or type(order) is not int or order < 0):
+            invalid += 1
+    return {"invalid_song_values": invalid,
+            "invalid_song_order": int(set(positions) != set(range(1, len(positions) + 1)))}
+
+
+def validate_song_values(counts: dict[str, int]) -> list[str]:
+    errors = []
+    if counts.get("invalid_song_values"):
+        errors.append(f"songs has invalid song values rows: {counts['invalid_song_values']}")
+    if counts.get("invalid_song_order"):
+        errors.append("songs sort_order must be unique and contiguous from 1")
+    return errors
+
+
 def load_core_counts(connection: sqlite3.Connection) -> dict[str, int]:
     return {
         "songs": scalar_count(connection, "SELECT COUNT(*) FROM songs"),
@@ -161,18 +202,23 @@ def scalar_count(
 
 
 def count_detail_json_values(
-    connection: sqlite3.Connection, video_ids: dict[str, set[str]] | None = None,
+    connection: sqlite3.Connection, video_ids: dict[str, set[str]] | None = None, *, require_complete: bool = False,
 ) -> dict[str, int]:
     counts = {
         "invalid_detail_json": 0,
+        "invalid_detail_contract": 0,
+        "detail_index_mismatch": 0,
         "videos": 0,
         "related_videos": 0,
         "videos_with_thumbnail": 0,
         "videos_with_title": 0,
     }
     unique_ids = video_ids if video_ids is not None else {"niconico": set(), "youtube": set()}
-    rows = connection.execute("SELECT payload_json FROM song_details")
-    for (payload_json,) in rows:
+    indexed_credits: dict[str, set[tuple]] = {}
+    for row in connection.execute("SELECT song_url, role, name, normalized_name FROM song_credit_people"):
+        indexed_credits.setdefault(row[0], set()).add(row)
+    rows = connection.execute("SELECT url, payload_json, published_year FROM song_details")
+    for url, payload_json, published_year in rows:
         try:
             detail = json.loads(payload_json)
         except json.JSONDecodeError:
@@ -181,6 +227,15 @@ def count_detail_json_values(
         if not isinstance(detail, dict):
             counts["invalid_detail_json"] += 1
             continue
+        if not valid_detail(detail, url, complete=require_complete):
+            counts["invalid_detail_contract"] += 1
+        # Match INSERT OR IGNORE: the first spelling for a normalized name wins.
+        expected_credits = {}
+        for row in credit_people_rows(url, detail):
+            expected_credits.setdefault((row[0], row[1], row[3]), row)
+        if (set(expected_credits.values()) != indexed_credits.get(url, set())
+                or detail_published_year(detail) != published_year):
+            counts["detail_index_mismatch"] += 1
         for section_name in ("videos", "related_videos"):
             section = detail.get(section_name)
             if isinstance(section, dict):
@@ -280,9 +335,13 @@ def validate_relations(connection: sqlite3.Connection) -> list[str]:
 
 
 def validate_detail_json_counts(counts: dict[str, int]) -> list[str]:
-    if counts.get("invalid_detail_json", 0):
-        return [f"song_details has invalid JSON rows: {counts['invalid_detail_json']}"]
-    return []
+    errors = []
+    for key, label in (("invalid_detail_json", "invalid JSON"),
+                       ("invalid_detail_contract", "invalid detail contract"),
+                       ("detail_index_mismatch", "detail/search index mismatch")):
+        if counts.get(key, 0):
+            errors.append(f"song_details has {label} rows: {counts[key]}")
+    return errors
 
 
 def validate_coverage(counts: dict[str, int]) -> list[str]:
